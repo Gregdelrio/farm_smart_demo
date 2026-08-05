@@ -2,143 +2,458 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VatWatch — Milk vat monitoring demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>VatWatch</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
 <style>
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #F1EFE8;
-    display: flex;
-    justify-content: center;
-    padding: 2rem 1rem;
-    min-height: 100vh;
+  * { 
+    box-sizing: border-box; 
+    -webkit-tap-highlight-color: transparent; 
   }
-  .card { background: #fff; border: 0.5px solid #D3D1C7; border-radius: 12px; padding: 1rem; }
-  button { border: 0.5px solid #B4B2A9; background: #fff; border-radius: 8px; padding: 8px; cursor: pointer; }
-  button:hover { background: #F1EFE8; }
-  #toggleAlert { background: #E24B4A; color: #fff; border: none; margin-top: 1rem; width: 100%; padding: 10px; font-size: 13px; font-weight: 500; border-radius: 8px; }
-  #toggleAlert:hover { background: #C93F3E; }
+  
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #ffffff;
+    color: #0f172a;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px);
+  }
+
+  /* TOP SECTION */
+  .top-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .label { 
+    font-size: 13px; 
+    font-weight: 700; 
+    color: #64748b; 
+    letter-spacing: 1.2px; 
+    text-transform: uppercase; 
+    margin: 0 0 16px 0; 
+  }
+
+  .temp-frame {
+    width: 100%;
+    max-width: 320px;
+    border-radius: 24px;
+    padding: 24px 16px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: #3B6D11;
+    box-shadow: 0 10px 25px -5px rgba(59, 109, 17, 0.3);
+    text-align: center;
+  }
+
+  .temp-frame.alert {
+    background: #E24B4A;
+    box-shadow: 0 10px 25px -5px rgba(226, 75, 74, 0.4);
+  }
+
+  .temp { 
+    font-size: 64px; 
+    font-weight: 800; 
+    color: #ffffff; 
+    margin: 0; 
+    line-height: 1; 
+    letter-spacing: -1px;
+  }
+
+  .unit { 
+    font-size: 28px; 
+    font-weight: 700; 
+    vertical-align: super; 
+    margin-left: 2px;
+  }
+
+  .status-row { 
+    display: inline-flex; 
+    align-items: center; 
+    justify-content: center; 
+    gap: 6px; 
+    margin-top: 12px; 
+    background: rgba(255, 255, 255, 0.2);
+    padding: 6px 14px;
+    border-radius: 20px;
+    backdrop-filter: blur(4px);
+  }
+
+  .status-icon { 
+    font-size: 18px; 
+    color: #ffffff; 
+  }
+
+  .status-text { 
+    font-size: 15px; 
+    font-weight: 700; 
+    color: #ffffff; 
+    margin: 0; 
+  }
+
+  .meta { 
+    text-align: center; 
+    font-size: 13px; 
+    color: #64748b; 
+    font-weight: 600; 
+    margin-top: 12px; 
+  }
+
+  /* MIDDLE / BANNER */
+  .middle-container {
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+
+  .sms-strip {
+    display: none;
+    background: #fef2f2;
+    border: 1.5px solid #fca5a5;
+    border-radius: 16px;
+    padding: 12px 14px;
+    text-align: center;
+    animation: slideDown 0.25s ease-out;
+  }
+
+  .sms-strip.show { 
+    display: block; 
+  }
+
+  .sms-strip p { 
+    color: #991b1b; 
+    font-size: 13px; 
+    font-weight: 700; 
+    margin: 0; 
+    line-height: 1.4; 
+  }
+
+  /* BOTTOM BUTTONS */
+  .bottom-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .big-btn {
+    width: 100%;
+    max-width: 320px;
+    height: 52px;
+    background: #0f172a;
+    border: none;
+    border-radius: 16px;
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+    transition: transform 0.1s ease, background-color 0.2s ease;
+  }
+
+  .big-btn:active { 
+    transform: scale(0.98); 
+    background: #1e293b;
+  }
+
+  .big-btn i { 
+    font-size: 18px; 
+    flex-shrink: 0; 
+  }
+
+  .big-btn span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* OVERLAY (MODAL FULLSCREEN) */
+  .details-overlay {
+    position: fixed;
+    inset: 0;
+    background: #f8fafc;
+    z-index: 100;
+    display: none;
+    flex-direction: column;
+    padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .details-overlay.show { 
+    display: flex; 
+  }
+
+  .details-content {
+    width: 100%;
+    max-width: 360px;
+    margin: 0 auto;
+  }
+
+  .details-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0 20px;
+  }
+
+  .details-header h1 { 
+    font-size: 22px; 
+    font-weight: 800; 
+    color: #0f172a; 
+    margin: 0; 
+  }
+
+  .close-btn {
+    width: 38px; 
+    height: 38px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    border: none;
+    color: #334155;
+    font-size: 20px;
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .close-btn:active {
+    background: #cbd5e1;
+  }
+
+  .details-card {
+    background: #ffffff;
+    border-radius: 18px;
+    margin-bottom: 14px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    border: 1px solid #e2e8f0;
+  }
+
+  .details-card h2 { 
+    font-size: 12px; 
+    font-weight: 700; 
+    color: #64748b; 
+    text-transform: uppercase; 
+    letter-spacing: 0.8px; 
+    margin: 0 0 12px; 
+  }
+
+  .stat-row { 
+    display: flex; 
+    gap: 10px; 
+    margin-bottom: 14px; 
+  }
+
+  .stat-box {
+    flex: 1;
+    text-align: center;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 12px 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    border: 1px solid #e2e8f0;
+  }
+
+  .stat-box p.stat-label { 
+    font-size: 12px; 
+    color: #64748b; 
+    margin: 0 0 4px; 
+    font-weight: 600; 
+  }
+
+  .stat-box p.stat-value { 
+    font-size: 22px; 
+    color: #0f172a; 
+    margin: 0; 
+    font-weight: 800; 
+  }
+
+  .row-line { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 10px 0; 
+    border-bottom: 1px solid #f1f5f9; 
+    font-size: 14px; 
+  }
+
+  .row-line:last-child { 
+    border-bottom: none; 
+  }
+
+  .row-line span.k { 
+    color: #64748b; 
+    font-weight: 600; 
+  }
+
+  .row-line span.v { 
+    color: #0f172a; 
+    font-weight: 700; 
+  }
+
+  .row-line span.v.ok { 
+    color: #16a34a; 
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 </style>
 </head>
 <body>
 
-<div style="max-width:380px;width:100%;background:#F1EFE8;border-radius:20px;padding:1rem;">
-
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div id="headerIcon" style="width:28px;height:28px;border-radius:8px;background:#EAF3DE;display:flex;align-items:center;justify-content:center;">
-        <i class="ti ti-droplet" style="font-size:16px;color:#3B6D11;"></i>
-      </div>
-      <span style="font-size:15px;font-weight:600;color:#2C2C2A;">VatWatch</span>
-    </div>
-    <i class="ti ti-dots" style="font-size:18px;color:#888780;"></i>
-  </div>
-
-  <div class="card" style="padding:1.25rem;text-align:center;margin-bottom:1rem;">
-    <p style="font-size:13px;color:#5F5E5A;margin:0 0 6px;">Main vat</p>
-    <p id="tempValue" style="font-size:40px;font-weight:600;margin:0;line-height:1;color:#2C2C2A;">3.8<span style="font-size:20px;">°C</span></p>
-    <div id="statusBadge" style="display:inline-flex;align-items:center;gap:6px;background:#EAF3DE;color:#3B6D11;font-size:12px;font-weight:500;padding:4px 12px;border-radius:20px;margin-top:10px;">
-      <i class="ti ti-check" style="font-size:14px;"></i>
-      Cooling normal
-    </div>
-    <p id="statusMeta" style="font-size:12px;color:#888780;margin:10px 0 0;">Updated 2 min ago · alert threshold 6°C</p>
-  </div>
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;">
-    <div class="card" style="text-align:center;">
-      <p style="font-size:11px;color:#888780;margin:0 0 4px;">Min 24h</p>
-      <p style="font-size:16px;font-weight:600;margin:0;color:#2C2C2A;">2.9°C</p>
-    </div>
-    <div class="card" style="text-align:center;">
-      <p style="font-size:11px;color:#888780;margin:0 0 4px;">Max 24h</p>
-      <p style="font-size:16px;font-weight:600;margin:0;color:#2C2C2A;">4.1°C</p>
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:1rem;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <span style="font-size:13px;font-weight:500;color:#2C2C2A;">24h trend</span>
-      <span style="font-size:11px;color:#888780;">°C</span>
-    </div>
-    <svg id="trendSvg" viewBox="0 0 320 90" style="width:100%;height:90px;">
-      <polyline id="trendLine" points="0,55 40,58 80,50 120,45 160,48 200,42 240,50 280,46 320,44" fill="none" stroke="#1D9E75" stroke-width="2.5"/>
-      <line x1="0" y1="20" x2="320" y2="20" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3,3"/>
-      <text x="322" y="24" font-size="9" fill="#888780" text-anchor="end">6°C limit</text>
-    </svg>
-  </div>
-
-  <button style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;color:#2C2C2A;" onclick="document.getElementById('adv').style.display=document.getElementById('adv').style.display==='none'?'block':'none'">
-    <i class="ti ti-adjustments" style="font-size:15px;"></i>
-    Advanced details
-  </button>
-
-  <div id="adv" style="display:none;margin-top:1rem;">
-    <div class="card" style="margin-bottom:10px;">
-      <p style="font-size:12px;color:#5F5E5A;margin:0 0 8px;font-weight:500;">Alert log</p>
-      <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid #D3D1C7;">
-        <span style="color:#5F5E5A;">Jul 28, 2:12pm</span>
-        <span style="color:#3B6D11;">Resolved · 3 min</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;">
-        <span style="color:#5F5E5A;">Jul 15, 3:40am</span>
-        <span style="color:#3B6D11;">Resolved · 9 min</span>
+  <!-- PAGE PRINCIPALE -->
+  <div class="top-container">
+    <p class="label">Main vat</p>
+    <div class="temp-frame" id="tempFrame">
+      <p class="temp" id="temp">3.8<span class="unit">°C</span></p>
+      <div class="status-row">
+        <i id="statusIcon" class="ti ti-check status-icon"></i>
+        <p class="status-text" id="statusText">All good</p>
       </div>
     </div>
-    <div class="card">
-      <p style="font-size:12px;color:#5F5E5A;margin:0 0 8px;font-weight:500;">Sensor status</p>
-      <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;color:#2C2C2A;"><span style="color:#5F5E5A;">4G signal</span><span>Good · -78 dBm</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;color:#2C2C2A;"><span style="color:#5F5E5A;">Battery</span><span>94%</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;color:#2C2C2A;"><span style="color:#5F5E5A;">Last sync</span><span>2 min ago</span></div>
+    <p class="meta" id="meta">Updated 2 min ago</p>
+  </div>
+
+  <div class="middle-container">
+    <div class="sms-strip" id="smsStrip">
+      <p id="smsText">⚠ Vat alert: temperature rising. Check the cooling system.</p>
     </div>
   </div>
 
-  <div id="smsBox" style="background:#FCEBEB;border-radius:12px;padding:0.9rem 1rem;margin-top:1rem;">
-    <p style="font-size:11px;color:#A32D2D;font-weight:600;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.3px;">Alert SMS preview</p>
-    <p style="font-size:13px;color:#2C2C2A;margin:0;">⚠ Vat alert: temperature rising (8.2°C, threshold 6°C). Check the cooling system.</p>
+  <div class="bottom-bar">
+    <button class="big-btn" onclick="toggleAlert()">
+      <i class="ti ti-refresh"></i>
+      <span id="btnLabel">Simulate alert</span>
+    </button>
+    <button class="big-btn" onclick="openDetails()">
+      <i class="ti ti-chart-line"></i>
+      <span>Details</span>
+    </button>
   </div>
 
-  <button id="toggleAlert" onclick="toggleAlert()">Simulate alert state (demo)</button>
+  <!-- OVERLAY DETAILS -->
+  <div class="details-overlay" id="detailsOverlay">
+    <div class="details-content">
+      <div class="details-header">
+        <h1>Today Overview</h1>
+        <button class="close-btn" onclick="closeDetails()" aria-label="Close"><i class="ti ti-x"></i></button>
+      </div>
 
-</div>
+      <div class="details-card">
+        <h2>24h trend</h2>
+        <svg viewBox="0 0 320 80" style="width:100%;height:80px;display:block;">
+          <polyline id="trendLine" points="0,50 30,53 60,45 90,40 120,43 150,35 180,43 210,37 240,33 270,39 300,35 320,37" fill="none" stroke="#16a34a" stroke-width="3"/>
+          <line x1="0" y1="18" x2="320" y2="18" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4,4"/>
+          <text x="320" y="13" font-size="10" fill="#94a3b8" text-anchor="end">6°C limit</text>
+        </svg>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-box">
+          <p class="stat-label">Min 24h</p>
+          <p class="stat-value" id="minVal">2.9°</p>
+        </div>
+        <div class="stat-box">
+          <p class="stat-label">Max 24h</p>
+          <p class="stat-value" id="maxVal">4.1°</p>
+        </div>
+      </div>
+
+      <div class="details-card">
+        <h2>Alert log</h2>
+        <div class="row-line" id="liveAlertRow" style="display:none;"><span class="k">Now</span><span class="v" id="liveAlertVal" style="color:#dc2626;">In progress · 18 min</span></div>
+        <div class="row-line"><span class="k">Jul 28, 2:12pm</span><span class="v ok">Resolved · 3 min</span></div>
+        <div class="row-line"><span class="k">Jul 15, 3:40am</span><span class="v ok">Resolved · 9 min</span></div>
+      </div>
+
+      <div class="details-card">
+        <h2>Sensor status</h2>
+        <div class="row-line"><span class="k">4G signal</span><span class="v" id="signalVal">Good · -78 dBm</span></div>
+        <div class="row-line"><span class="k">Battery</span><span class="v">94%</span></div>
+        <div class="row-line"><span class="k">Last sync</span><span class="v" id="syncVal">2 min ago</span></div>
+      </div>
+    </div>
+  </div>
 
 <script>
+function openDetails() { document.getElementById('detailsOverlay').classList.add('show'); }
+function closeDetails() { document.getElementById('detailsOverlay').classList.remove('show'); }
+
 let alertOn = false;
 function toggleAlert() {
   alertOn = !alertOn;
-  const temp = document.getElementById('tempValue');
-  const badge = document.getElementById('statusBadge');
-  const meta = document.getElementById('statusMeta');
-  const line = document.getElementById('trendLine');
-  const btn = document.getElementById('toggleAlert');
-  const headerIcon = document.getElementById('headerIcon');
+  const frame = document.getElementById('tempFrame');
+  const temp = document.getElementById('temp');
+  const icon = document.getElementById('statusIcon');
+  const text = document.getElementById('statusText');
+  const meta = document.getElementById('meta');
+  const label = document.getElementById('btnLabel');
+  const smsStrip = document.getElementById('smsStrip');
+
+  const trendLine = document.getElementById('trendLine');
+  const minVal = document.getElementById('minVal');
+  const maxVal = document.getElementById('maxVal');
+  const liveAlertRow = document.getElementById('liveAlertRow');
+  const signalVal = document.getElementById('signalVal');
+  const syncVal = document.getElementById('syncVal');
 
   if (alertOn) {
-    temp.innerHTML = '8.2<span style="font-size:20px;">°C</span>';
-    temp.style.color = '#A32D2D';
-    badge.style.background = '#FCEBEB';
-    badge.style.color = '#A32D2D';
-    badge.innerHTML = '<i class="ti ti-alert-triangle" style="font-size:14px;"></i> Temperature rising';
-    meta.textContent = 'Updated just now · above alert threshold 6°C';
-    line.setAttribute('points', '0,55 40,50 80,45 120,30 160,20 200,10 240,5 280,2 320,0');
-    line.setAttribute('stroke', '#E24B4A');
-    headerIcon.style.background = '#FCEBEB';
-    headerIcon.querySelector('i').style.color = '#A32D2D';
-    btn.textContent = 'Back to normal state (demo)';
+    frame.classList.add('alert');
+    icon.className = 'ti ti-alert-triangle status-icon';
+    temp.innerHTML = '8.2<span class="unit">°C</span>';
+    text.textContent = 'Too warm';
+    meta.textContent = 'Above 6°C for 18 min';
+    label.textContent = 'Back to normal';
+    smsStrip.classList.add('show');
+
+    trendLine.setAttribute('points', '0,50 30,53 60,45 90,40 120,43 150,35 180,43 210,37 240,20 270,12 300,6 320,2');
+    trendLine.setAttribute('stroke', '#dc2626');
+    maxVal.textContent = '8.2°';
+    maxVal.style.color = '#dc2626';
+    liveAlertRow.style.display = 'flex';
+    signalVal.textContent = 'Weak · -102 dBm';
+    syncVal.textContent = 'Just now';
   } else {
-    temp.innerHTML = '3.8<span style="font-size:20px;">°C</span>';
-    temp.style.color = '#2C2C2A';
-    badge.style.background = '#EAF3DE';
-    badge.style.color = '#3B6D11';
-    badge.innerHTML = '<i class="ti ti-check" style="font-size:14px;"></i> Cooling normal';
-    meta.textContent = 'Updated 2 min ago · alert threshold 6°C';
-    line.setAttribute('points', '0,55 40,58 80,50 120,45 160,48 200,42 240,50 280,46 320,44');
-    line.setAttribute('stroke', '#1D9E75');
-    headerIcon.style.background = '#EAF3DE';
-    headerIcon.querySelector('i').style.color = '#3B6D11';
-    btn.textContent = 'Simulate alert state (demo)';
+    frame.classList.remove('alert');
+    icon.className = 'ti ti-check status-icon';
+    temp.innerHTML = '3.8<span class="unit">°C</span>';
+    text.textContent = 'All good';
+    meta.textContent = 'Updated 2 min ago';
+    label.textContent = 'Simulate alert';
+    smsStrip.classList.remove('show');
+
+    trendLine.setAttribute('points', '0,50 30,53 60,45 90,40 120,43 150,35 180,43 210,37 240,33 270,39 300,35 320,37');
+    trendLine.setAttribute('stroke', '#16a34a');
+    maxVal.textContent = '4.1°';
+    maxVal.style.color = '#0f172a';
+    liveAlertRow.style.display = 'none';
+    signalVal.textContent = 'Good · -78 dBm';
+    syncVal.textContent = '2 min ago';
   }
 }
 </script>
