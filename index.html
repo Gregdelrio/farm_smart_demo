@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VatWatch — Milk vat monitoring demo</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #F1EFE8;
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem;
+    min-height: 100vh;
+  }
+  .card { background: #fff; border: 0.5px solid #D3D1C7; border-radius: 12px; padding: 1rem; }
+  button { border: 0.5px solid #B4B2A9; background: #fff; border-radius: 8px; padding: 8px; cursor: pointer; }
+  button:hover { background: #F1EFE8; }
+  #toggleAlert { background: #E24B4A; color: #fff; border: none; margin-top: 1rem; width: 100%; padding: 10px; font-size: 13px; font-weight: 500; border-radius: 8px; }
+  #toggleAlert:hover { background: #C93F3E; }
+</style>
+</head>
+<body>
+
+<div style="max-width:380px;width:100%;background:#F1EFE8;border-radius:20px;padding:1rem;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div id="headerIcon" style="width:28px;height:28px;border-radius:8px;background:#EAF3DE;display:flex;align-items:center;justify-content:center;">
+        <i class="ti ti-droplet" style="font-size:16px;color:#3B6D11;"></i>
+      </div>
+      <span style="font-size:15px;font-weight:600;color:#2C2C2A;">VatWatch</span>
+    </div>
+    <i class="ti ti-dots" style="font-size:18px;color:#888780;"></i>
+  </div>
+
+  <div class="card" style="padding:1.25rem;text-align:center;margin-bottom:1rem;">
+    <p style="font-size:13px;color:#5F5E5A;margin:0 0 6px;">Main vat</p>
+    <p id="tempValue" style="font-size:40px;font-weight:600;margin:0;line-height:1;color:#2C2C2A;">3.8<span style="font-size:20px;">°C</span></p>
+    <div id="statusBadge" style="display:inline-flex;align-items:center;gap:6px;background:#EAF3DE;color:#3B6D11;font-size:12px;font-weight:500;padding:4px 12px;border-radius:20px;margin-top:10px;">
+      <i class="ti ti-check" style="font-size:14px;"></i>
+      Cooling normal
+    </div>
+    <p id="statusMeta" style="font-size:12px;color:#888780;margin:10px 0 0;">Updated 2 min ago · alert threshold 6°C</p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;">
+    <div class="card" style="text-align:center;">
+      <p style="font-size:11px;color:#888780;margin:0 0 4px;">Min 24h</p>
+      <p style="font-size:16px;font-weight:600;margin:0;color:#2C2C2A;">2.9°C</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <p style="font-size:11px;color:#888780;margin:0 0 4px;">Max 24h</p>
+      <p style="font-size:16px;font-weight:600;margin:0;color:#2C2C2A;">4.1°C</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <span style="font-size:13px;font-weight:500;color:#2C2C2A;">24h trend</span>
+      <span style="font-size:11px;color:#888780;">°C</span>
+    </div>
+    <svg id="trendSvg" viewBox="0 0 320 90" style="width:100%;height:90px;">
+      <polyline id="trendLine" points="0,55 40,58 80,50 120,45 160,48 200,42 240,50 280,46 320,44" fill="none" stroke="#1D9E75" stroke-width="2.5"/>
+      <line x1="0" y1="20" x2="320" y2="20" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="322" y="24" font-size="9" fill="#888780" text-anchor="end">6°C limit</text>
+    </svg>
+  </div>
+
+  <button style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;color:#2C2C2A;" onclick="document.getElementById('adv').style.display=document.getElementById('adv').style.display==='none'?'block':'none'">
+    <i class="ti ti-adjustments" style="font-size:15px;"></i>
+    Advanced details
+  </button>
+
+  <div id="adv" style="display:none;margin-top:1rem;">
+    <div class="card" style="margin-bottom:10px;">
+      <p style="font-size:12px;color:#5F5E5A;margin:0 0 8px;font-weight:500;">Alert log</p>
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid #D3D1C7;">
+        <span style="color:#5F5E5A;">Jul 28, 2:12pm</span>
+        <span style="color:#3B6D11;">Resolved · 3 min</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;">
+        <span style="color:#5F5E5A;">Jul 15, 3:40am</span>
+        <span style="color:#3B6D11;">Resolved · 9 min</span>
+      </div>
+    </div>
+    <div class="card">
+      <p style="font-size:12px;color:#5F5E5A;margin:0 0 8px;font-weight:500;">Sensor status</p>
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;color:#2C2C2A;"><span style="color:#5F5E5A;">4G signal</span><span>Good · -78 dBm</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;color:#2C2C2A;"><span style="color:#5F5E5A;">Battery</span><span>94%</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;color:#2C2C2A;"><span style="color:#5F5E5A;">Last sync</span><span>2 min ago</span></div>
+    </div>
+  </div>
+
+  <div id="smsBox" style="background:#FCEBEB;border-radius:12px;padding:0.9rem 1rem;margin-top:1rem;">
+    <p style="font-size:11px;color:#A32D2D;font-weight:600;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.3px;">Alert SMS preview</p>
+    <p style="font-size:13px;color:#2C2C2A;margin:0;">⚠ Vat alert: temperature rising (8.2°C, threshold 6°C). Check the cooling system.</p>
+  </div>
+
+  <button id="toggleAlert" onclick="toggleAlert()">Simulate alert state (demo)</button>
+
+</div>
+
+<script>
+let alertOn = false;
+function toggleAlert() {
+  alertOn = !alertOn;
+  const temp = document.getElementById('tempValue');
+  const badge = document.getElementById('statusBadge');
+  const meta = document.getElementById('statusMeta');
+  const line = document.getElementById('trendLine');
+  const btn = document.getElementById('toggleAlert');
+  const headerIcon = document.getElementById('headerIcon');
+
+  if (alertOn) {
+    temp.innerHTML = '8.2<span style="font-size:20px;">°C</span>';
+    temp.style.color = '#A32D2D';
+    badge.style.background = '#FCEBEB';
+    badge.style.color = '#A32D2D';
+    badge.innerHTML = '<i class="ti ti-alert-triangle" style="font-size:14px;"></i> Temperature rising';
+    meta.textContent = 'Updated just now · above alert threshold 6°C';
+    line.setAttribute('points', '0,55 40,50 80,45 120,30 160,20 200,10 240,5 280,2 320,0');
+    line.setAttribute('stroke', '#E24B4A');
+    headerIcon.style.background = '#FCEBEB';
+    headerIcon.querySelector('i').style.color = '#A32D2D';
+    btn.textContent = 'Back to normal state (demo)';
+  } else {
+    temp.innerHTML = '3.8<span style="font-size:20px;">°C</span>';
+    temp.style.color = '#2C2C2A';
+    badge.style.background = '#EAF3DE';
+    badge.style.color = '#3B6D11';
+    badge.innerHTML = '<i class="ti ti-check" style="font-size:14px;"></i> Cooling normal';
+    meta.textContent = 'Updated 2 min ago · alert threshold 6°C';
+    line.setAttribute('points', '0,55 40,58 80,50 120,45 160,48 200,42 240,50 280,46 320,44');
+    line.setAttribute('stroke', '#1D9E75');
+    headerIcon.style.background = '#EAF3DE';
+    headerIcon.querySelector('i').style.color = '#3B6D11';
+    btn.textContent = 'Simulate alert state (demo)';
+  }
+}
+</script>
+
+</body>
+</html>
