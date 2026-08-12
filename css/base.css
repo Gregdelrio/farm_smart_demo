@@ -1,0 +1,291 @@
+/* =====================================================================
+   FARMSMART — BASE STYLESHEET
+   ---------------------------------------------------------------------
+   Shared design system only. NOTHING tile-specific lives in this file
+   — each tile has its own stylesheet in css/tiles/. That split is what
+   makes a tile removable: delete its <link> line in index.html and its
+   visuals disappear with it, without touching this file.
+
+   ONE PALETTE, USED EVERYWHERE (main screen and any tile's own detail
+   overlays), so there's never a light/dark mismatch between screens:
+     base background   #1c1c1a   dark anthracite, never pure white
+     green  #3B6D11 / #6bd47a  = OK / normal
+     red    #E24B4A             = alert / danger (a REAL problem state —
+                                   never used just for confirming an
+                                   action, see §7 Confirmation dialog)
+     yellow #F2B705             = primary action / confirmation accent
+     blue   #4AA9E0 / #7ec8f2   = informational / in progress
+
+   Sections:
+     1. Base / reset
+     2. Header — brand, farm picker, user picker, sync pill
+     3. Shared card shell + badges (used by every tile)
+     4. Bottom sheets (farm switcher + user switcher)
+     5. Confirmation dialog (neutral, not red)
+     6. Toast
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   0. APP FRAME + RESPONSIVE LAYOUT
+   ---------------------------------------------------------------------
+   HOW SIZING WORKS NOW: most of this file uses "cqw" (container query
+   width — % of the nearest ANCESTOR that has `container-type` set)
+   instead of "vw" (% of the whole browser window). Three elements are
+   containers: #appFrame, .card, and .sheet / .confirm-box. That means:
+
+   - Anything inside a .card (the big vat number, the crossing button,
+     etc.) sizes itself relative to THAT CARD'S own width — not the
+     whole page. So a card looks proportioned the same whether it's
+     the full width of a phone screen, or one cell in a 2-column grid
+     on a desktop monitor. This is what makes desktop "just work"
+     without a separate set of desktop font sizes to maintain.
+   - Header text (farm name, user name, etc.) does NOT use cqw — the
+     header spans the full width of #appFrame, which gets much wider
+     on desktop than a phone screen, and we don't want header text to
+     blow up along with it. Header sizes below are fixed rem values
+     instead, tuned once to look right everywhere.
+
+   LAYOUT: on a phone, #appFrame is edge-to-edge and tiles stack in a
+   single column (this is unchanged from before). Above 760px wide,
+   two things happen: #appFrame is allowed to grow up to 1100px
+   (instead of staying stuck at phone width), and the dashboard switches
+   from one column of tiles to a 2-column grid — see section 3 below
+   for the grid rule itself.
+--------------------------------------------------------------------- */
+#appFrame {
+  max-width: 1100px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: #1c1c1a;
+  position: relative; /* overlays/dialogs/toast are positioned against THIS, not the browser window */
+  container-type: inline-size;
+  container-name: app-frame;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #1c1c1a;
+  color: #fff;
+}
+body { padding-bottom: 6vh; }
+
+/* ---------------------------------------------------------------------
+   2. HEADER
+   Three stacked rows:
+     - brand mark ("FarmSmart"), small and muted
+     - farm picker (left) + user picker (right) — both on the SAME row
+     - sync status pill, right-aligned underneath
+   Fixed rem sizes throughout (not cqw) — see the note in section 0 on
+   why the header is the one part of the app that doesn't scale with
+   the frame's width.
+--------------------------------------------------------------------- */
+.app-header { padding: 2rem 1.5rem 0.5rem; max-width: 640px; margin: 0 auto; }
+
+.brand {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #F2B705;
+  margin-bottom: 0.75rem;
+}
+
+.header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* --- Farm picker (left) --- */
+.farm-picker {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  background: none; border: none; color: #fff; padding: 0;
+  cursor: pointer; text-align: left; min-width: 0; /* allow long farm names to ellipsis if needed */
+}
+.farm-picker .eyebrow { font-size: 0.7rem; color: rgba(255,255,255,0.5); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+.farm-picker .name-row { display: flex; align-items: center; gap: 0.4rem; }
+.farm-picker .name { font-size: 1.35rem; font-weight: 800; line-height: 1.15; }
+.farm-picker i { font-size: 1.1rem; color: #F2B705; flex-shrink: 0; }
+
+/* --- User picker (right, same row as farm picker) --- */
+.user-picker {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px; padding: 0.4rem 0.9rem 0.4rem 0.4rem; cursor: pointer; color: #fff;
+  flex-shrink: 0;
+}
+.user-picker__avatar {
+  width: 2.1rem; height: 2.1rem;
+  border-radius: 50%; background: #F2B705; color: #1c1c1a;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.95rem; font-weight: 800; flex-shrink: 0;
+}
+.user-picker__text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+.user-picker__name { font-size: 0.9rem; font-weight: 800; }
+.user-picker__role { font-size: 0.7rem; color: rgba(255,255,255,0.5); font-weight: 600; }
+.user-picker i { font-size: 0.95rem; color: rgba(255,255,255,0.5); margin-left: 0.15rem; }
+
+/* --- Sync status pill --- */
+.sync-row { display: flex; justify-content: flex-end; margin-top: 0.6rem; max-width: 640px; margin-left: auto; margin-right: auto; }
+.sync-pill {
+  display: flex; align-items: center; gap: 0.4rem;
+  background: rgba(107,212,122,0.12); border-radius: 999px;
+  padding: 0.3rem 0.8rem; font-size: 0.75rem; font-weight: 700; color: #6bd47a;
+  white-space: nowrap;
+}
+.sync-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #6bd47a; }
+.sync-pill.offline { background: rgba(242,183,5,0.15); color: #F2B705; }
+.sync-pill.offline .dot { background: #F2B705; }
+
+.section-label {
+  font-size: 1rem; font-weight: 800; color: rgba(255,255,255,0.55);
+  text-transform: uppercase; letter-spacing: 1px; margin: 2rem auto 0.75rem;
+  max-width: 640px; padding: 0 1.5rem;
+}
+
+/* ---------------------------------------------------------------------
+   3. SHARED CARD SHELL + BADGES
+   Every tile's outer wrapper uses these classes so spacing and type
+   stay consistent app-wide, even though each tile's *inner* content is
+   styled by its own css/tiles/xxx.css file.
+
+   `container-type: inline-size` on .card is the key line for desktop:
+   it makes every cqw value INSIDE a tile (the big vat number, the
+   crossing button label, etc.) size itself relative to that card's
+   own width — not the page's. So the same numbers work whether the
+   card is a full-width phone column or one cell in the desktop grid
+   below, with no separate "desktop font sizes" to maintain.
+--------------------------------------------------------------------- */
+.card {
+  margin: 0 1.5rem 1.25rem; border-radius: 24px; padding: 3.5vh 5cqw;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+  container-type: inline-size;
+}
+.card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2vh; }
+.card-title {
+  display: flex; align-items: center; gap: 2cqw;
+  font-size: 3.8cqw; font-weight: 800; color: rgba(255,255,255,0.75);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.card-title i { font-size: 4.5cqw; }
+
+.badge { font-size: 3.2cqw; font-weight: 800; padding: 0.8vh 3cqw; border-radius: 999px; white-space: nowrap; }
+.badge.ok   { background: rgba(107,212,122,0.15); color: #6bd47a; }
+.badge.warn { background: rgba(226,75,74,0.18);   color: #ff9b8a; }
+.badge.info { background: rgba(74,169,224,0.18);  color: #7ec8f2; }
+
+/* Generic secondary button — any tile can use this class for a plain
+   full-width action ("View details", "Timings", etc). */
+.card-btn {
+  width: 100%; margin-top: 2.5vh; background: rgba(255,255,255,0.08);
+  border: none; border-radius: 16px; color: #fff; font-size: 4cqw;
+  font-weight: 700; padding: 2vh 2cqw; display: flex; align-items: center;
+  justify-content: center; gap: 2.5cqw; cursor: pointer;
+}
+.card-btn:active { transform: scale(0.98); }
+.card-btn.primary { background: #F2B705; color: #1c1c1a; }
+
+/* ---------------------------------------------------------------------
+   3b. RESPONSIVE DASHBOARD GRID
+   Below 760px (phones, most tablets in portrait): #dashboard is just a
+   normal block, tiles stack top to bottom — unchanged from before.
+   At 760px and up (tablets in landscape, laptops, desktops): tiles
+   arrange into a 2-column grid instead, and #appFrame is free to grow
+   up to its 1100px cap (set in section 0) to fit them comfortably.
+--------------------------------------------------------------------- */
+@media (min-width: 760px) {
+  #dashboard {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem 1.5rem;
+    padding: 0 1.5rem 1.25rem;
+  }
+  .card { margin: 0; } /* grid gap + container padding above replace the mobile side/bottom margins */
+}
+
+/* Full-screen detail overlay shell — any tile can reuse this for its
+   own "View details" drill-down (same dark background as everything
+   else, so there's no light/dark mismatch between screens). */
+.overlay {
+  position: absolute; inset: 0; background: #1c1c1a; z-index: 20;
+  display: none; flex-direction: column; overflow-y: auto;
+}
+.overlay.show { display: flex; }
+.overlay-header { display: flex; align-items: center; justify-content: flex-start; gap: 1rem; padding: 2.5rem 1.5rem 1.5rem; max-width: 640px; margin: 0 auto; width: 100%; }
+.overlay-header h1 { font-size: 1.75rem; font-weight: 800; margin: 0; }
+.close-btn {
+  width: 2.75rem; height: 2.75rem; border-radius: 50%;
+  background: rgba(255,255,255,0.12); border: none; color: #fff; font-size: 1.3rem;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.row-line { display: flex; justify-content: space-between; align-items: center; padding: 2vh 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 1rem; }
+.row-line:last-child { border-bottom: none; }
+.row-line .k { color: rgba(255,255,255,0.55); font-weight: 600; }
+.row-line .v { color: #fff; font-weight: 700; }
+.row-line .v.ok { color: #6bd47a; }
+
+/* ---------------------------------------------------------------------
+   4. BOTTOM SHEETS (farm switcher + user switcher)
+   Both reuse the exact same .sheet-row markup/styling for consistency.
+--------------------------------------------------------------------- */
+.sheet-mask {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.65); z-index: 30;
+  display: none; align-items: flex-end; justify-content: center;
+}
+.sheet-mask.show { display: flex; }
+.sheet {
+  width: 100%; max-width: 640px; background: #262622;
+  border-radius: 24px 24px 0 0; padding: 4vh 5cqw 5vh;
+  container-type: inline-size;
+}
+.sheet h2 { font-size: 5.5cqw; font-weight: 800; margin: 0 0 3vh; }
+
+.sheet-row {
+  width: 100%; text-align: left; background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 14px;
+  padding: 2.5vh 4cqw; margin-bottom: 2vh; color: #fff; cursor: pointer;
+  display: flex; flex-direction: column;
+}
+.sheet-row.active { border-color: #F2B705; background: rgba(242,183,5,0.1); }
+.sheet-row__title { font-size: 4.5cqw; font-weight: 800; }
+.sheet-row__meta { font-size: 3.3cqw; color: rgba(255,255,255,0.5); margin-top: 0.5vh; }
+
+/* ---------------------------------------------------------------------
+   5. CONFIRMATION DIALOG — NEUTRAL, NOT RED
+   This just double-checks an action before it runs. It is never itself
+   a warning, so it must never look like one — hence the yellow accent
+   below rather than the red used by tiles for genuine alert states.
+--------------------------------------------------------------------- */
+.confirm-mask {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.65); z-index: 30;
+  display: none; align-items: center; justify-content: center; padding: 6cqw;
+}
+.confirm-mask.show { display: flex; }
+.confirm-box {
+  width: 100%; max-width: 400px; background: #262622;
+  border: 1px solid #F2B705; /* neutral yellow accent, not red */
+  border-radius: 20px; padding: 4vh 5cqw;
+  container-type: inline-size;
+}
+.confirm-box h2 { font-size: 5cqw; font-weight: 800; margin: 0 0 1.5vh; }
+.confirm-box p { font-size: 3.8cqw; color: rgba(255,255,255,0.6); line-height: 1.5; margin: 0; }
+.confirm-actions { display: flex; gap: 3cqw; margin-top: 3.5vh; }
+.confirm-actions button { flex: 1; min-height: 6.5vh; border-radius: 14px; border: none; font-size: 3.8cqw; font-weight: 700; cursor: pointer; }
+.confirm-actions .cancel { background: rgba(255,255,255,0.1); color: #fff; }
+.confirm-actions .ok { background: #F2B705; color: #1c1c1a; } /* same neutral yellow — confirming isn't an alarm */
+
+/* ---------------------------------------------------------------------
+   6. TOAST
+--------------------------------------------------------------------- */
+.toast {
+  position: absolute; left: 50%; bottom: 4vh; transform: translateX(-50%);
+  background: #262622; border: 1px solid #F2B705; color: #fff;
+  padding: 0.7rem 1.5rem; border-radius: 999px; font-size: 0.9rem; font-weight: 700;
+  z-index: 40; display: none; white-space: nowrap;
+}
+.toast.show { display: block; }

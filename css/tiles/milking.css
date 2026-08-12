@@ -1,0 +1,16 @@
+/* =====================================================================
+   TILE: LIVE MILKING STATUS
+   ===================================================================== */
+
+.milk-count-row { display: flex; align-items: baseline; justify-content: space-between; }
+.milk-count { font-size: 11cqw; font-weight: 800; }
+.milk-of { font-size: 4cqw; font-weight: 600; color: rgba(255,255,255,0.55); margin-left: 1.5cqw; }
+.milk-pct { font-size: 4.5cqw; font-weight: 800; color: #7ec8f2; }
+
+.milk-progress { height: 3.2vh; border-radius: 999px; background: rgba(255,255,255,0.1); overflow: hidden; margin-top: 1.5vh; }
+.milk-progress .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #4AA9E0, #6bd47a); transition: width .4s ease; }
+
+.milk-stat-row { display: flex; gap: 4cqw; margin-top: 3vh; padding-top: 2.5vh; border-top: 1px solid rgba(255,255,255,0.1); }
+.milk-stat-box { flex: 1; }
+.milk-stat-box .stat-label { font-size: 3.4cqw; color: rgba(255,255,255,0.5); font-weight: 600; margin: 0 0 0.5vh; }
+.milk-stat-box .stat-value { font-size: 5cqw; font-weight: 800; margin: 0; }

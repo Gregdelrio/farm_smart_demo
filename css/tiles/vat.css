@@ -1,0 +1,23 @@
+/* =====================================================================
+   TILE: MILK VAT TEMPERATURE
+   ---------------------------------------------------------------------
+   Only styles for markup found inside this tile's <div class="card">
+   (defined in js/tiles/vat.js). Shared shell/badge/overlay styles come
+   from css/base.css.
+   ===================================================================== */
+
+.vat-temp-frame {
+  border-radius: 20px; padding: 3vh 4cqw; text-align: center;
+  background: #3B6D11; /* green = in range */
+  transition: background 0.3s ease;
+}
+.vat-temp-frame.alert { background: #E24B4A; } /* red = genuinely out of range */
+
+.vat-temp { font-size: 15cqw; font-weight: 800; margin: 0; line-height: 1; }
+.vat-temp .unit { font-size: 5.5cqw; font-weight: 700; vertical-align: 2.4cqw; }
+
+.vat-status-row { display: flex; align-items: center; justify-content: center; gap: 2cqw; margin-top: 1vh; }
+.vat-status-row i { font-size: 6cqw; }
+.vat-status-row span { font-size: 4.5cqw; font-weight: 800; }
+
+.vat-meta { text-align: center; font-size: 3.3cqw; color: rgba(255,255,255,0.5); font-weight: 600; margin-top: 1.5vh; }

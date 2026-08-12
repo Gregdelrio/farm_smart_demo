@@ -2,461 +2,141 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>VatWatch</title>
+<!-- Locks pinch-zoom off so our large touch targets stay reliably large
+     on screen — important when the user is wearing gloves. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1c1c1a">
+<title>FarmSmart</title>
+
+<!-- Icon font. This is a CDN link: the icon files themselves are NOT
+     part of this project, they're fetched from Cloudflare's public CDN
+     the first time the page loads. Every <i class="ti ti-xxx"></i> tag
+     anywhere in this app (including inside each tile's own template
+     string) renders using this file. -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
-<style>
-  * { 
-    box-sizing: border-box; 
-    -webkit-tap-highlight-color: transparent; 
-  }
-  
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #ffffff;
-    color: #0f172a;
-    overflow: hidden;
-  }
 
-  body {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px);
-  }
+<!-- Shared design system (header, card shell, sheets, dialogs, toast).
+     No tile-specific rules live here — see css/tiles/ below. -->
+<link rel="stylesheet" href="css/base.css">
 
-  /* TOP SECTION */
-  .top-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    margin-top: 12px;
-  }
-
-  .label { 
-    font-size: 13px; 
-    font-weight: 700; 
-    color: #64748b; 
-    letter-spacing: 1.2px; 
-    text-transform: uppercase; 
-    margin: 0 0 16px 0; 
-  }
-
-  .temp-frame {
-    width: 100%;
-    max-width: 320px;
-    border-radius: 24px;
-    padding: 24px 16px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    background: #3B6D11;
-    box-shadow: 0 10px 25px -5px rgba(59, 109, 17, 0.3);
-    text-align: center;
-  }
-
-  .temp-frame.alert {
-    background: #E24B4A;
-    box-shadow: 0 10px 25px -5px rgba(226, 75, 74, 0.4);
-  }
-
-  .temp { 
-    font-size: 64px; 
-    font-weight: 800; 
-    color: #ffffff; 
-    margin: 0; 
-    line-height: 1; 
-    letter-spacing: -1px;
-  }
-
-  .unit { 
-    font-size: 28px; 
-    font-weight: 700; 
-    vertical-align: super; 
-    margin-left: 2px;
-  }
-
-  .status-row { 
-    display: inline-flex; 
-    align-items: center; 
-    justify-content: center; 
-    gap: 6px; 
-    margin-top: 12px; 
-    background: rgba(255, 255, 255, 0.2);
-    padding: 6px 14px;
-    border-radius: 20px;
-    backdrop-filter: blur(4px);
-  }
-
-  .status-icon { 
-    font-size: 18px; 
-    color: #ffffff; 
-  }
-
-  .status-text { 
-    font-size: 15px; 
-    font-weight: 700; 
-    color: #ffffff; 
-    margin: 0; 
-  }
-
-  .meta { 
-    text-align: center; 
-    font-size: 13px; 
-    color: #64748b; 
-    font-weight: 600; 
-    margin-top: 12px; 
-  }
-
-  /* MIDDLE / BANNER */
-  .middle-container {
-    width: 100%;
-    max-width: 320px;
-    margin: 0 auto;
-  }
-
-  .sms-strip {
-    display: none;
-    background: #fef2f2;
-    border: 1.5px solid #fca5a5;
-    border-radius: 16px;
-    padding: 12px 14px;
-    text-align: center;
-    animation: slideDown 0.25s ease-out;
-  }
-
-  .sms-strip.show { 
-    display: block; 
-  }
-
-  .sms-strip p { 
-    color: #991b1b; 
-    font-size: 13px; 
-    font-weight: 700; 
-    margin: 0; 
-    line-height: 1.4; 
-  }
-
-  /* BOTTOM BUTTONS */
-  .bottom-bar {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    margin-bottom: 8px;
-  }
-
-  .big-btn {
-    width: 100%;
-    max-width: 320px;
-    height: 52px;
-    background: #0f172a;
-    border: none;
-    border-radius: 16px;
-    color: #ffffff;
-    font-size: 15px;
-    font-weight: 700;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    cursor: pointer;
-    user-select: none;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
-    transition: transform 0.1s ease, background-color 0.2s ease;
-  }
-
-  .big-btn:active { 
-    transform: scale(0.98); 
-    background: #1e293b;
-  }
-
-  .big-btn i { 
-    font-size: 18px; 
-    flex-shrink: 0; 
-  }
-
-  .big-btn span {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* OVERLAY (MODAL FULLSCREEN) */
-  .details-overlay {
-    position: fixed;
-    inset: 0;
-    background: #f8fafc;
-    z-index: 100;
-    display: none;
-    flex-direction: column;
-    padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .details-overlay.show { 
-    display: flex; 
-  }
-
-  .details-content {
-    width: 100%;
-    max-width: 360px;
-    margin: 0 auto;
-  }
-
-  .details-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 0 20px;
-  }
-
-  .details-header h1 { 
-    font-size: 22px; 
-    font-weight: 800; 
-    color: #0f172a; 
-    margin: 0; 
-  }
-
-  .close-btn {
-    width: 38px; 
-    height: 38px;
-    border-radius: 50%;
-    background: #e2e8f0;
-    border: none;
-    color: #334155;
-    font-size: 20px;
-    display: flex; 
-    align-items: center; 
-    justify-content: center;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  .close-btn:active {
-    background: #cbd5e1;
-  }
-
-  .details-card {
-    background: #ffffff;
-    border-radius: 18px;
-    margin-bottom: 14px;
-    padding: 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-    border: 1px solid #e2e8f0;
-  }
-
-  .details-card h2 { 
-    font-size: 12px; 
-    font-weight: 700; 
-    color: #64748b; 
-    text-transform: uppercase; 
-    letter-spacing: 0.8px; 
-    margin: 0 0 12px; 
-  }
-
-  .stat-row { 
-    display: flex; 
-    gap: 10px; 
-    margin-bottom: 14px; 
-  }
-
-  .stat-box {
-    flex: 1;
-    text-align: center;
-    background: #ffffff;
-    border-radius: 16px;
-    padding: 12px 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-    border: 1px solid #e2e8f0;
-  }
-
-  .stat-box p.stat-label { 
-    font-size: 12px; 
-    color: #64748b; 
-    margin: 0 0 4px; 
-    font-weight: 600; 
-  }
-
-  .stat-box p.stat-value { 
-    font-size: 22px; 
-    color: #0f172a; 
-    margin: 0; 
-    font-weight: 800; 
-  }
-
-  .row-line { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    padding: 10px 0; 
-    border-bottom: 1px solid #f1f5f9; 
-    font-size: 14px; 
-  }
-
-  .row-line:last-child { 
-    border-bottom: none; 
-  }
-
-  .row-line span.k { 
-    color: #64748b; 
-    font-weight: 600; 
-  }
-
-  .row-line span.v { 
-    color: #0f172a; 
-    font-weight: 700; 
-  }
-
-  .row-line span.v.ok { 
-    color: #16a34a; 
-  }
-
-  @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-</style>
+<!-- ================================================================
+     TILE STYLESHEETS
+     One <link> per tile. Comment out (or delete) a line to remove
+     that tile's visual styling — pair it with removing the matching
+     <script> tag near the bottom of this file.
+================================================================= -->
+<link rel="stylesheet" href="css/tiles/vat.css">
+<link rel="stylesheet" href="css/tiles/crossing.css">
+<link rel="stylesheet" href="css/tiles/milking.css">
+<link rel="stylesheet" href="css/tiles/milk-statement.css">
+<link rel="stylesheet" href="css/tiles/gates.css">
 </head>
 <body>
 
-  <!-- PAGE PRINCIPALE -->
-  <div class="top-container">
-    <p class="label">Main vat</p>
-    <div class="temp-frame" id="tempFrame">
-      <p class="temp" id="temp">3.8<span class="unit">°C</span></p>
-      <div class="status-row">
-        <i id="statusIcon" class="ti ti-check status-icon"></i>
-        <p class="status-text" id="statusText">All good</p>
-      </div>
+  <!-- Everything lives inside #appFrame — see the "0. APP FRAME" comment
+       at the top of css/base.css for why this wrapper exists (it's what
+       keeps the app phone-sized and centered on a desktop browser). -->
+  <div id="appFrame">
+
+  <!-- ============================================================
+       HEADER
+       Row 1: brand mark
+       Row 2: farm picker (left) + user picker (right) — same row
+       Row 3: sync status pill
+  ============================================================ -->
+  <div class="app-header">
+    <div class="brand">FarmSmart</div>
+
+    <div class="header-row">
+      <button class="farm-picker" onclick="openFarmSheet()">
+        <span class="eyebrow">Active farm</span>
+        <span class="name-row">
+          <span class="name" id="activeFarmName">Laang Farm</span>
+          <i class="ti ti-chevron-down"></i>
+        </span>
+      </button>
+
+      <button class="user-picker" onclick="openUserSheet()">
+        <span class="user-picker__avatar" id="activeUserInitials">J</span>
+        <span class="user-picker__text">
+          <span class="user-picker__name" id="activeUserName">John</span>
+          <span class="user-picker__role" id="activeUserRole">Owner</span>
+        </span>
+        <i class="ti ti-chevron-down"></i>
+      </button>
     </div>
-    <p class="meta" id="meta">Updated 2 min ago</p>
-  </div>
 
-  <div class="middle-container">
-    <div class="sms-strip" id="smsStrip">
-      <p id="smsText">⚠ Vat alert: temperature rising. Check the cooling system.</p>
-    </div>
-  </div>
-
-  <div class="bottom-bar">
-    <button class="big-btn" onclick="toggleAlert()">
-      <i class="ti ti-refresh"></i>
-      <span id="btnLabel">Simulate alert</span>
-    </button>
-    <button class="big-btn" onclick="openDetails()">
-      <i class="ti ti-chart-line"></i>
-      <span>Details</span>
-    </button>
-  </div>
-
-  <!-- OVERLAY DETAILS -->
-  <div class="details-overlay" id="detailsOverlay">
-    <div class="details-content">
-      <div class="details-header">
-        <h1>Today Overview</h1>
-        <button class="close-btn" onclick="closeDetails()" aria-label="Close"><i class="ti ti-x"></i></button>
-      </div>
-
-      <div class="details-card">
-        <h2>24h trend</h2>
-        <svg viewBox="0 0 320 80" style="width:100%;height:80px;display:block;">
-          <polyline id="trendLine" points="0,50 30,53 60,45 90,40 120,43 150,35 180,43 210,37 240,33 270,39 300,35 320,37" fill="none" stroke="#16a34a" stroke-width="3"/>
-          <line x1="0" y1="18" x2="320" y2="18" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4,4"/>
-          <text x="320" y="13" font-size="10" fill="#94a3b8" text-anchor="end">6°C limit</text>
-        </svg>
-      </div>
-
-      <div class="stat-row">
-        <div class="stat-box">
-          <p class="stat-label">Min 24h</p>
-          <p class="stat-value" id="minVal">2.9°</p>
-        </div>
-        <div class="stat-box">
-          <p class="stat-label">Max 24h</p>
-          <p class="stat-value" id="maxVal">4.1°</p>
-        </div>
-      </div>
-
-      <div class="details-card">
-        <h2>Alert log</h2>
-        <div class="row-line" id="liveAlertRow" style="display:none;"><span class="k">Now</span><span class="v" id="liveAlertVal" style="color:#dc2626;">In progress · 18 min</span></div>
-        <div class="row-line"><span class="k">Jul 28, 2:12pm</span><span class="v ok">Resolved · 3 min</span></div>
-        <div class="row-line"><span class="k">Jul 15, 3:40am</span><span class="v ok">Resolved · 9 min</span></div>
-      </div>
-
-      <div class="details-card">
-        <h2>Sensor status</h2>
-        <div class="row-line"><span class="k">4G signal</span><span class="v" id="signalVal">Good · -78 dBm</span></div>
-        <div class="row-line"><span class="k">Battery</span><span class="v">94%</span></div>
-        <div class="row-line"><span class="k">Last sync</span><span class="v" id="syncVal">2 min ago</span></div>
-      </div>
+    <div class="sync-row">
+      <div class="sync-pill" id="syncPill"><span class="dot"></span><span>Synced</span></div>
     </div>
   </div>
 
-<script>
-function openDetails() { document.getElementById('detailsOverlay').classList.add('show'); }
-function closeDetails() { document.getElementById('detailsOverlay').classList.remove('show'); }
+  <p class="section-label">Dashboard</p>
 
-let alertOn = false;
-function toggleAlert() {
-  alertOn = !alertOn;
-  const frame = document.getElementById('tempFrame');
-  const temp = document.getElementById('temp');
-  const icon = document.getElementById('statusIcon');
-  const text = document.getElementById('statusText');
-  const meta = document.getElementById('meta');
-  const label = document.getElementById('btnLabel');
-  const smsStrip = document.getElementById('smsStrip');
+  <!-- ============================================================
+       DASHBOARD — intentionally EMPTY. Each tile injects its own
+       markup here at runtime (see js/core.js §7 mountTiles). The
+       order tiles appear on screen matches the order their <script>
+       tags are listed at the bottom of this file.
+  ============================================================ -->
+  <main id="dashboard"></main>
 
-  const trendLine = document.getElementById('trendLine');
-  const minVal = document.getElementById('minVal');
-  const maxVal = document.getElementById('maxVal');
-  const liveAlertRow = document.getElementById('liveAlertRow');
-  const signalVal = document.getElementById('signalVal');
-  const syncVal = document.getElementById('syncVal');
+  <!-- ============================================================
+       FARM SWITCHER SHEET
+  ============================================================ -->
+  <div class="sheet-mask" id="farmSheetMask">
+    <div class="sheet">
+      <h2>Switch farm</h2>
+      <div id="farmList"></div>
+    </div>
+  </div>
 
-  if (alertOn) {
-    frame.classList.add('alert');
-    icon.className = 'ti ti-alert-triangle status-icon';
-    temp.innerHTML = '8.2<span class="unit">°C</span>';
-    text.textContent = 'Too warm';
-    meta.textContent = 'Above 6°C for 18 min';
-    label.textContent = 'Back to normal';
-    smsStrip.classList.add('show');
+  <!-- ============================================================
+       USER SWITCHER SHEET
+       Both users currently see/do the same things — role-based
+       restriction isn't implemented yet (see js/core.js §3 TODO).
+  ============================================================ -->
+  <div class="sheet-mask" id="userSheetMask">
+    <div class="sheet">
+      <h2>Switch user</h2>
+      <div id="userList"></div>
+    </div>
+  </div>
 
-    trendLine.setAttribute('points', '0,50 30,53 60,45 90,40 120,43 150,35 180,43 210,37 240,20 270,12 300,6 320,2');
-    trendLine.setAttribute('stroke', '#dc2626');
-    maxVal.textContent = '8.2°';
-    maxVal.style.color = '#dc2626';
-    liveAlertRow.style.display = 'flex';
-    signalVal.textContent = 'Weak · -102 dBm';
-    syncVal.textContent = 'Just now';
-  } else {
-    frame.classList.remove('alert');
-    icon.className = 'ti ti-check status-icon';
-    temp.innerHTML = '3.8<span class="unit">°C</span>';
-    text.textContent = 'All good';
-    meta.textContent = 'Updated 2 min ago';
-    label.textContent = 'Simulate alert';
-    smsStrip.classList.remove('show');
+  <!-- ============================================================
+       GENERIC CONFIRMATION DIALOG (neutral, not red — see base.css)
+  ============================================================ -->
+  <div class="confirm-mask" id="confirmMask">
+    <div class="confirm-box">
+      <h2 id="confirmTitle">Confirm?</h2>
+      <p id="confirmMsg"></p>
+      <div class="confirm-actions">
+        <button class="cancel" onclick="closeConfirm()">Cancel</button>
+        <button class="ok" id="confirmOkBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
 
-    trendLine.setAttribute('points', '0,50 30,53 60,45 90,40 120,43 150,35 180,43 210,37 240,33 270,39 300,35 320,37');
-    trendLine.setAttribute('stroke', '#16a34a');
-    maxVal.textContent = '4.1°';
-    maxVal.style.color = '#0f172a';
-    liveAlertRow.style.display = 'none';
-    signalVal.textContent = 'Good · -78 dBm';
-    syncVal.textContent = '2 min ago';
-  }
-}
-</script>
+  <div class="toast" id="toast"></div>
 
+  </div><!-- /#appFrame -->
+
+  <!-- ============================================================
+       SCRIPTS
+       Load order matters: core.js first (defines FarmSmart +
+       registerTile), then one <script> per tile. Each tile calls
+       registerTile() as soon as it loads; core.js then mounts all
+       of them, in this order, once the page is ready.
+
+       TO DISABLE A TILE: comment out (or delete) its <script> line
+       here AND its matching <link> line in <head> above. That's the
+       only file you need to touch.
+  ============================================================ -->
+  <script src="js/core.js"></script>
+  <script src="js/tiles/vat.js"></script>
+  <script src="js/tiles/crossing.js"></script>
+  <script src="js/tiles/milking.js"></script>
+  <script src="js/tiles/milk-statement.js"></script>
+  <script src="js/tiles/gates.js"></script>
 </body>
 </html>

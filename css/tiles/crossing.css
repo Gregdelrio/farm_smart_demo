@@ -1,0 +1,41 @@
+/* =====================================================================
+   TILE: ROAD CROSSING
+   ---------------------------------------------------------------------
+   Only styles for markup inside this tile's card (js/tiles/crossing.js).
+   ===================================================================== */
+
+/* Signature control: a big yellow "push button", styled like a
+   physical industrial button so it's recognizable by shape alone.
+   While active, it blinks orange — there's no separate badge or hint
+   text, the button itself carries the whole status. */
+.crossing-btn {
+  width: 100%; min-height: 20vh; border: none; border-radius: 22px;
+  background: #F2B705; box-shadow: 0 1.2vh 0 #C99604;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #1c1c1a; cursor: pointer;
+  transition: transform .08s ease, box-shadow .08s ease;
+  position: relative;
+}
+.crossing-btn:active { transform: translateY(0.8vh); box-shadow: 0 0.4vh 0 #C99604; }
+.crossing-btn i { font-size: 9cqw; margin-bottom: 0.5vh; }
+.crossing-btn .line1 { font-size: 6cqw; font-weight: 800; letter-spacing: 1px; }
+.crossing-btn .line2 { font-size: 3.4cqw; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 0.3vh; }
+
+/* Active state: blinking orange, not the static red used for a REAL
+   alert elsewhere in the app (vat temperature out of range) — this is
+   a "live action in progress" state, not a danger warning. */
+.crossing-btn.active {
+  animation: crossing-blink 1s ease-in-out infinite;
+}
+@keyframes crossing-blink {
+  0%, 100% { background: #FF8C00; box-shadow: 0 1.2vh 0 #B35F00; }
+  50%      { background: #FFB347; box-shadow: 0 1.2vh 0 #CC7A00; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crossing-btn.active { animation: none; background: #FF8C00; box-shadow: 0 1.2vh 0 #B35F00; }
+}
+
+.crossing-road-label {
+  text-align: center; font-size: 3.6cqw; font-weight: 700;
+  color: rgba(255,255,255,0.6); margin-top: 1.5vh;
+}

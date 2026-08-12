@@ -1,0 +1,11 @@
+/* =====================================================================
+   TILE: PADDOCK GATES
+   ===================================================================== */
+
+.gate-next { background: rgba(255,255,255,0.08); border-radius: 16px; padding: 2.5vh 4cqw; }
+.gate-next .lbl { font-size: 3.3cqw; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+.gate-next .name { font-size: 5cqw; font-weight: 800; margin-top: 0.5vh; }
+.gate-next .time { font-size: 3.7cqw; font-weight: 700; color: #F2B705; margin-top: 0.8vh; }
+
+.gate-btn-row { display: flex; gap: 3cqw; margin-top: 2.5vh; }
+.gate-btn-row .card-btn { margin-top: 0; }
