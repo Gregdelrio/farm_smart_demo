@@ -9,6 +9,9 @@
 .vat-temp-frame {
   border-radius: 20px; padding: 3vh 4cqw; text-align: center;
   background: #3B6D11; /* green = in range */
+  color: #fff; /* ALWAYS white, regardless of theme — this is a solid saturated
+                   block, not page background, so it must not inherit the
+                   theme's text color (which would be dark in light mode) */
   transition: background 0.3s ease;
 }
 .vat-temp-frame.alert { background: #E24B4A; } /* red = genuinely out of range */
@@ -20,4 +23,4 @@
 .vat-status-row i { font-size: 6cqw; }
 .vat-status-row span { font-size: 4.5cqw; font-weight: 800; }
 
-.vat-meta { text-align: center; font-size: 3.3cqw; color: rgba(255,255,255,0.5); font-weight: 600; margin-top: 1.5vh; }
+.vat-meta { text-align: center; font-size: 3.3cqw; color: var(--text-muted); font-weight: 600; margin-top: 1.5vh; }

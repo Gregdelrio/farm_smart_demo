@@ -170,6 +170,36 @@ a local static server (recommended on a phone):
 python3 -m http.server 8080
 ```
 
+## Light / dark theme
+
+Tap the sun/moon button in the header (between the farm picker and
+the user picker) to switch between dark and light mode. The choice is
+saved to `localStorage` on that device — it persists across reloads,
+and is independent of which user (John/Greg) is selected. Every color
+in the app is defined once as a CSS variable in `css/base.css` §0
+(`:root` = dark defaults, `[data-theme="light"]` = overrides) — a few
+solid, fully-saturated blocks (the milk vat's green/red frame, the
+road crossing button, the crossing-active blink) intentionally keep
+fixed colors in both themes, the same way a stop sign is red
+regardless of how bright the day is.
+
+## Why sheets/dialogs/overlays used to open below your scroll position
+
+Fixed now — they use `position: fixed` (anchored to what's actually on
+screen) rather than `position: absolute` (anchored to the full page,
+which is often much taller than one screen once several tiles are
+stacked). See the comment above `.overlay` in `css/base.css` §3 for
+the full explanation. This applies to the farm/user switcher sheets,
+the confirmation dialog, every tile's detail overlay, and the toast.
+
+## Back button icon
+
+The back arrow inside a tile's detail overlay is drawn as inline SVG
+(not the Tabler icon font) specifically so it can never fail to render
+due to a slow/blocked CDN or a stale cache — see the top of
+`js/tiles/vat.js` or `js/tiles/milk-statement.js` for the markup, and
+`.close-btn svg` in `css/base.css` for its styling.
+
 ## The confirmation dialog is not red
 
 Confirming an action (switching farms, starting the crossing sequence,

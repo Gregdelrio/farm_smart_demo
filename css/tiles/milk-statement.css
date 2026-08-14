@@ -6,23 +6,23 @@
    ===================================================================== */
 
 .ms-pickup-line {
-  font-size: 3.4cqw; color: rgba(255,255,255,0.55); font-weight: 600;
+  font-size: 3.4cqw; color: var(--text-secondary); font-weight: 600;
   margin: 0 0 2vh;
 }
 
 .ms-volume-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2.5vh; }
 .ms-volume { font-size: 11cqw; font-weight: 800; line-height: 1; }
-.ms-volume .unit { font-size: 4.5cqw; font-weight: 700; color: rgba(255,255,255,0.6); margin-left: 1cqw; }
-.ms-temp { font-size: 3.6cqw; font-weight: 700; color: #7ec8f2; white-space: nowrap; }
+.ms-volume .unit { font-size: 4.5cqw; font-weight: 700; color: var(--text-secondary); margin-left: 1cqw; }
+.ms-temp { font-size: 3.6cqw; font-weight: 700; color: var(--color-blue); white-space: nowrap; }
 
 .ms-stat-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 1.5vh 4cqw;
-  padding: 2vh 0; border-top: 1px solid rgba(255,255,255,0.1); border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding: 2vh 0; border-top: 1px solid var(--border-divider); border-bottom: 1px solid var(--border-divider);
   margin-bottom: 2.5vh;
 }
-.ms-stat .stat-label { font-size: 3cqw; color: rgba(255,255,255,0.5); font-weight: 600; margin: 0 0 0.4vh; text-transform: uppercase; letter-spacing: 0.3px; }
+.ms-stat .stat-label { font-size: 3cqw; color: var(--text-muted); font-weight: 600; margin: 0 0 0.4vh; text-transform: uppercase; letter-spacing: 0.3px; }
 .ms-stat .stat-value { font-size: 4.2cqw; font-weight: 800; margin: 0; }
-.ms-stat .stat-value small { font-size: 2.8cqw; font-weight: 600; color: rgba(255,255,255,0.5); }
+.ms-stat .stat-value small { font-size: 2.8cqw; font-weight: 600; color: var(--text-muted); }
 
 /* Milk solids (kg MS) is the headline figure — it's what farm income
    is actually calculated from — so it gets its own highlighted row
@@ -32,15 +32,15 @@
   background: rgba(242,183,5,0.1); border: 1px solid rgba(242,183,5,0.3);
   border-radius: 16px; padding: 2vh 4cqw;
 }
-.ms-highlight .stat-label { font-size: 3.2cqw; color: #F2B705; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
-.ms-highlight .stat-value-lg { font-size: 5.5cqw; font-weight: 800; color: #F2B705; }
+.ms-highlight .stat-label { font-size: 3.2cqw; color: var(--accent-yellow-text); font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+.ms-highlight .stat-value-lg { font-size: 5.5cqw; font-weight: 800; color: var(--accent-yellow-text); }
 
 /* ---- Monthly overlay ---- */
 .ms-month-row { display: flex; gap: 1rem; margin: 0 1.5rem 1.25rem; }
-.ms-month-box { flex: 1; background: rgba(255,255,255,0.06); border-radius: 16px; padding: 1.5rem 1rem; text-align: center; }
-.ms-month-box .stat-label { font-size: 0.8rem; color: rgba(255,255,255,0.5); font-weight: 600; margin: 0 0 0.4rem; }
+.ms-month-box { flex: 1; background: var(--bg-card); border-radius: 16px; padding: 1.5rem 1rem; text-align: center; }
+.ms-month-box .stat-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; margin: 0 0 0.4rem; }
 .ms-month-box .stat-value { font-size: 1.4rem; font-weight: 800; margin: 0; }
 
 .ms-payment-card { text-align: center; }
-.ms-payment-card .stat-label { font-size: 0.85rem; color: rgba(255,255,255,0.5); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
-.ms-payment-value { font-size: 2.6rem; font-weight: 800; color: #6bd47a; margin: 0.4rem 0; }
+.ms-payment-card .stat-label { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.ms-payment-value { font-size: 2.6rem; font-weight: 800; color: var(--color-green); margin: 0.4rem 0; }

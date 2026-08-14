@@ -39,7 +39,9 @@ FarmSmart.registerTile({
 
     <div class="overlay" id="vatDetailsOverlay">
       <div class="overlay-header">
-        <button class="close-btn" id="vatBackBtn" aria-label="Back"><i class="ti ti-arrow-left"></i></button>
+        <button class="close-btn" id="vatBackBtn" aria-label="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
         <h1>Today</h1>
       </div>
 

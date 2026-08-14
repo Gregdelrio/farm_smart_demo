@@ -37,5 +37,5 @@
 
 .crossing-road-label {
   text-align: center; font-size: 3.6cqw; font-weight: 700;
-  color: rgba(255,255,255,0.6); margin-top: 1.5vh;
+  color: var(--text-secondary); margin-top: 1.5vh;
 }

@@ -232,7 +232,52 @@ FarmSmart.randomSyncLabel = function () {
 };
 
 /* ---------------------------------------------------------------------
-   6. ONLINE/OFFLINE STATUS
+   6. LIGHT / DARK THEME TOGGLE
+   ---------------------------------------------------------------------
+   Persisted per-device via localStorage (not tied to which user —
+   John/Greg — is selected). Wrapped in try/catch because localStorage
+   can throw in some sandboxed preview contexts; if it fails, the
+   toggle still works for the current session, it just won't be
+   remembered on reload.
+--------------------------------------------------------------------- */
+const THEME_STORAGE_KEY = 'farmsmart-theme';
+
+function getStoredTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY);
+  } catch (e) {
+    return null;
+  }
+}
+function storeTheme(theme) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch (e) {
+    // Storage unavailable — toggle still works this session, just
+    // won't persist. Not worth surfacing to the user.
+  }
+}
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('themeToggleBtn').setAttribute('aria-label', 'Switch to dark mode');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.getElementById('themeToggleBtn').setAttribute('aria-label', 'Switch to light mode');
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  applyTheme(getStoredTheme() || 'dark');
+  document.getElementById('themeToggleBtn').addEventListener('click', () => {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    const next = isLight ? 'dark' : 'light';
+    applyTheme(next);
+    storeTheme(next);
+  });
+});
+
+/* ---------------------------------------------------------------------
+   7. ONLINE/OFFLINE STATUS
    Useful on farms with patchy mobile signal between paddocks.
 --------------------------------------------------------------------- */
 function updateSyncStatus() {
@@ -245,7 +290,7 @@ window.addEventListener('online', updateSyncStatus);
 window.addEventListener('offline', updateSyncStatus);
 
 /* ---------------------------------------------------------------------
-   7. BOOT
+   8. BOOT
    Runs once the page (and every tile script before this point) has
    loaded. Injects every registered tile's markup into #dashboard, in
    registration order, then runs each tile's init().
