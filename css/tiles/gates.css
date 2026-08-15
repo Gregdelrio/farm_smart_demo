@@ -1,11 +1,87 @@
 /* =====================================================================
    TILE: PADDOCK GATES
+   ---------------------------------------------------------------------
+   Covers three things: the dashboard card itself (next scheduled gate
+   + a short list of the others), the "Timings" wheel-picker sheet
+   (date + paddock + time), and the lighter "Open Now" wheel-picker
+   sheet (paddock only). Both sheets reuse .sheet-mask/.sheet from
+   css/base.css — only the wheel/date-toggle/list styling is specific
+   to this tile.
    ===================================================================== */
 
+/* ---- Dashboard card: next gate + short list ---- */
 .gate-next { background: var(--bg-card-alt); border-radius: 16px; padding: 2.5vh 4cqw; }
 .gate-next .lbl { font-size: 3.3cqw; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
-.gate-next .name { font-size: 5cqw; font-weight: 800; margin-top: 0.5vh; }
+.gate-next .name { font-size: 6cqw; font-weight: 800; margin-top: 0.5vh; }
 .gate-next .time { font-size: 3.7cqw; font-weight: 700; color: var(--accent-yellow-text); margin-top: 0.8vh; }
+.gate-next.empty .name { font-size: 4cqw; font-weight: 700; color: var(--text-muted); }
+
+.gate-list { margin-top: 1.5vh; }
+.gate-list-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.2vh 0; border-bottom: 1px solid var(--border-divider);
+}
+.gate-list-row:last-child { border-bottom: none; }
+.gate-list-row__text { font-size: 3.6cqw; font-weight: 700; }
+.gate-list-row__time { font-size: 3.2cqw; color: var(--text-muted); font-weight: 600; margin-left: 0.5em; }
+.gate-list-row__delete {
+  width: 1.8rem; height: 1.8rem; border-radius: 50%; border: none; flex-shrink: 0;
+  background: var(--color-red-bg); color: var(--color-red);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.gate-list-row__delete svg { width: 0.85rem; height: 0.85rem; }
 
 .gate-btn-row { display: flex; gap: 3cqw; margin-top: 2.5vh; }
 .gate-btn-row .card-btn { margin-top: 0; }
+
+/* ---- Date toggle (Today / Tomorrow segmented control) ---- */
+.date-toggle {
+  display: flex; background: var(--bg-card-alt); border-radius: 12px; padding: 4px;
+  margin: 0 1.5rem 1.5rem;
+}
+.date-toggle__btn {
+  flex: 1; border: none; background: none; color: var(--text-secondary);
+  font-weight: 700; font-size: 0.95rem; padding: 0.7rem 0; border-radius: 9px; cursor: pointer;
+}
+.date-toggle__btn.active { background: var(--accent-yellow); color: #1c1c1a; }
+
+/* ---- Wheel picker ---- */
+.wheel-section-label {
+  font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-muted); margin: 0 1.5rem 0.5rem;
+}
+.wheel-picker-row {
+  position: relative;
+  display: flex; gap: 0.5rem;
+  height: 200px; /* 5 visible rows × 40px */
+  margin: 0 1.5rem 1.5rem;
+}
+.wheel-col {
+  flex: 1; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+}
+.wheel-col::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+
+.wheel-pad { height: 80px; } /* (200px - 40px row) / 2, so first/last values can center */
+
+.wheel-item {
+  height: 40px; display: flex; align-items: center; justify-content: center;
+  scroll-snap-align: center;
+  font-size: 1.05rem; font-weight: 700; color: var(--text-muted);
+  cursor: pointer;
+}
+.wheel-item.selected { color: var(--text-primary); font-size: 1.3rem; }
+
+/* Highlight band across the center row, behind the numbers, showing
+   which row is "selected" without blocking taps/scroll. */
+.wheel-highlight {
+  position: absolute; left: 0; right: 0; top: 80px; height: 40px;
+  border-top: 1px solid var(--border-divider); border-bottom: 1px solid var(--border-divider);
+  background: rgba(242,183,5,0.06);
+  pointer-events: none;
+}
+
+/* Sheet action buttons reuse .card-btn (defined in base.css) but need
+   side margins to match the rest of the sheet's content. */
+.wheel-sheet-actions { margin: 0 1.5rem; }

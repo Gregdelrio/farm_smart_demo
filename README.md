@@ -200,6 +200,34 @@ due to a slow/blocked CDN or a stale cache — see the top of
 `js/tiles/vat.js` or `js/tiles/milk-statement.js` for the markup, and
 `.close-btn svg` in `css/base.css` for its styling.
 
+## Paddock Gates: wheel pickers and the schedule list
+
+- **"Timings"** schedules a *future* gate opening: Today/Tomorrow, then
+  a paddock code (wheels differ per farm — see `PADDOCK_WHEEL_CONFIG`
+  in `js/tiles/gates.js`), then an hour/minute/AM-PM time. Saving adds
+  it to that farm's schedule list (max 4; past that, "Timings" shows a
+  toast instead of opening).
+- **"Open Now"** is separate and unrelated to the schedule: it opens a
+  paddock-only wheel picker (no date/time) and opens that paddock
+  immediately — it never touches the schedule list.
+- Both wheel pickers are built from `FarmSmart.createWheel()` in
+  `js/core.js` §6 — an iPhone-style scroll-and-snap column. Any tile
+  can reuse it for its own picker.
+- The schedule shown on the card is per-farm (`scheduleByFarm` in
+  `js/tiles/gates.js`) — switching farms shows that farm's own list.
+- Each entry beyond the first (shown big at the top) appears as a
+  small row with its own red ✕ to remove it — no confirmation, so a
+  typo is one tap to fix.
+
+## Greg (Employee) can't see Milk Statement
+
+The only permission rule wired up so far: switching to Greg hides the
+Milk Statement tile completely (not greyed out — it's just not there),
+switching back to John brings it back, live, no reload needed. See the
+comment above `updateVisibilityForUser()` in `js/tiles/milk-statement.js`
+for how it works, and the TODO in `js/core.js` §3 for adding further
+role restrictions later.
+
 ## The confirmation dialog is not red
 
 Confirming an action (switching farms, starting the crossing sequence,

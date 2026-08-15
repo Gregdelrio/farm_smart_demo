@@ -43,7 +43,7 @@ FarmSmart.registerTile({
   id: 'milk-statement',
 
   html: `
-    <div class="card">
+    <div class="card" id="msCard">
       <div class="card-top">
         <span class="card-title"><i class="ti ti-truck-delivery"></i>Milk Statement</span>
         <span class="badge info" id="msBadge">Synced 4 min ago</span>
@@ -95,6 +95,20 @@ FarmSmart.registerTile({
   `,
 
   init: function () {
+    // RESTRICTION: this tile is Owner-only. It's the only permission
+    // rule in the app so far — see the TODO in js/core.js §3 for how
+    // to add more if/when it's decided what else Employee shouldn't
+    // see. Hides completely (not greyed out/locked) — for Greg, this
+    // tile simply doesn't exist.
+    function updateVisibilityForUser() {
+      const card = document.getElementById('msCard');
+      const isOwner = FarmSmart.currentUser.role === 'Owner';
+      card.style.display = isOwner ? '' : 'none';
+      if (!isOwner) {
+        document.getElementById('msDetailsOverlay').classList.remove('show');
+      }
+    }
+
     function refreshForActiveFarm() {
       const farm = FarmSmart.getActiveFarm();
 
@@ -130,8 +144,10 @@ FarmSmart.registerTile({
     }
 
     document.addEventListener('farmsmart:farmchanged', refreshForActiveFarm);
+    document.addEventListener('farmsmart:userchanged', updateVisibilityForUser);
 
     refreshForActiveFarm();
+    updateVisibilityForUser();
     refreshSyncBadge();
     setInterval(refreshSyncBadge, 20000);
   },

@@ -178,6 +178,7 @@ function onUserTapped(user) {
   document.getElementById('activeUserName').textContent = user.name;
   document.getElementById('activeUserRole').textContent = user.role;
   showToast(`Now viewing as ${user.name} (${user.role})`);
+  document.dispatchEvent(new CustomEvent('farmsmart:userchanged', { detail: { user } }));
 }
 
 /* ---------------------------------------------------------------------
@@ -232,7 +233,88 @@ FarmSmart.randomSyncLabel = function () {
 };
 
 /* ---------------------------------------------------------------------
-   6. LIGHT / DARK THEME TOGGLE
+   6. WHEEL PICKER (shared iPhone-style scroll wheel utility)
+   ---------------------------------------------------------------------
+   Any tile can use this for a scrollable, snap-to-center picker column
+   (see js/tiles/gates.js for the paddock/time picker built from it).
+
+   FarmSmart.createWheel(container, values, initialIndex) turns an
+   empty element into one wheel column: it fills it with one row per
+   value, adds top/bottom padding so the first and last values can
+   still scroll to the vertical center, and tracks which value is
+   currently centered as the user scrolls. Returns a small controller
+   object: { getValue(), getIndex(), setIndex(i) }.
+
+   IMPORTANT: the row height here (WHEEL_ROW_HEIGHT) must match
+   `.wheel-item { height: ... }` in css/tiles/gates.css — if you change
+   one, change the other, or the snap math will be off.
+--------------------------------------------------------------------- */
+const WHEEL_ROW_HEIGHT = 40; // px — keep in sync with .wheel-item height in CSS
+
+FarmSmart.createWheel = function (container, values, initialIndex) {
+  container.innerHTML = '';
+  container.classList.add('wheel-col');
+
+  // Padding rows above/below so the first/last real values can be
+  // scrolled all the way to the center of the visible wheel.
+  const padTop = document.createElement('div');
+  padTop.className = 'wheel-pad';
+  container.appendChild(padTop);
+
+  values.forEach((value, i) => {
+    const item = document.createElement('div');
+    item.className = 'wheel-item';
+    item.textContent = value;
+    item.dataset.index = i;
+    container.appendChild(item);
+  });
+
+  const padBottom = document.createElement('div');
+  padBottom.className = 'wheel-pad';
+  container.appendChild(padBottom);
+
+  let currentIndex = initialIndex || 0;
+
+  function markSelected() {
+    container.querySelectorAll('.wheel-item').forEach((el, i) => {
+      el.classList.toggle('selected', i === currentIndex);
+    });
+  }
+
+  function scrollToIndex(i, smooth) {
+    currentIndex = Math.max(0, Math.min(values.length - 1, i));
+    container.scrollTo({ top: currentIndex * WHEEL_ROW_HEIGHT, behavior: smooth ? 'smooth' : 'auto' });
+    markSelected();
+  }
+
+  // While scrolling/flicking, wait for it to settle (debounced) before
+  // snapping to the nearest value and reporting it as selected.
+  let settleTimer = null;
+  container.addEventListener('scroll', () => {
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      const idx = Math.round(container.scrollTop / WHEEL_ROW_HEIGHT);
+      scrollToIndex(idx, true);
+    }, 120);
+  });
+
+  // Tapping a value directly (instead of scrolling to it) selects it.
+  container.addEventListener('click', (e) => {
+    const item = e.target.closest('.wheel-item');
+    if (item) scrollToIndex(parseInt(item.dataset.index, 10), true);
+  });
+
+  scrollToIndex(currentIndex, false);
+
+  return {
+    getValue: () => values[currentIndex],
+    getIndex: () => currentIndex,
+    setIndex: (i) => scrollToIndex(i, true),
+  };
+};
+
+/* ---------------------------------------------------------------------
+   7. LIGHT / DARK THEME TOGGLE
    ---------------------------------------------------------------------
    Persisted per-device via localStorage (not tied to which user —
    John/Greg — is selected). Wrapped in try/catch because localStorage
@@ -277,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ---------------------------------------------------------------------
-   7. ONLINE/OFFLINE STATUS
+   8. ONLINE/OFFLINE STATUS
    Useful on farms with patchy mobile signal between paddocks.
 --------------------------------------------------------------------- */
 function updateSyncStatus() {
@@ -290,7 +372,7 @@ window.addEventListener('online', updateSyncStatus);
 window.addEventListener('offline', updateSyncStatus);
 
 /* ---------------------------------------------------------------------
-   8. BOOT
+   9. BOOT
    Runs once the page (and every tile script before this point) has
    loaded. Injects every registered tile's markup into #dashboard, in
    registration order, then runs each tile's init().
