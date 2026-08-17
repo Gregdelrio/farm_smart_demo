@@ -1,0 +1,62 @@
+/* =====================================================================
+   TILE: ROAD CROSSING
+   ---------------------------------------------------------------------
+   Only styles for markup inside this tile's card (js/tiles/crossing.js).
+   ===================================================================== */
+
+/* Signature control: a big yellow "push button", styled like a
+   physical industrial button so it's recognizable by shape alone.
+   While active, it blinks orange — there's no separate badge or hint
+   text, the button itself carries the whole status. */
+.crossing-btn {
+  width: 100%; min-height: 20vh; border: none; border-radius: 22px;
+  background: #F2B705; box-shadow: 0 1.2vh 0 #C99604;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #1c1c1a; cursor: pointer;
+  transition: transform .08s ease, box-shadow .08s ease;
+  position: relative;
+}
+.crossing-btn:active { transform: translateY(0.8vh); box-shadow: 0 0.4vh 0 #C99604; }
+.crossing-btn i { font-size: 9cqw; margin-bottom: 0.5vh; position: relative; z-index: 1; }
+.crossing-btn .line1 { font-size: 6cqw; font-weight: 800; letter-spacing: 1px; position: relative; z-index: 1; }
+.crossing-btn .line2 { font-size: 3.4cqw; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 0.3vh; position: relative; z-index: 1; }
+
+/* Active state: blinking orange, not the static red used for a REAL
+   alert elsewhere in the app (vat temperature out of range) — this is
+   a "live action in progress" state, not a danger warning.
+
+   IMPLEMENTATION NOTE: the base background switches to solid orange
+   (no animation on it), and the "blink" is a separate ::after overlay
+   that pulses its OPACITY on top. Animating background-color directly
+   (an earlier version of this file did) forces the browser to repaint
+   every frame, which many mobile browsers throttle or skip entirely
+   to save battery — the blink could look completely static on a
+   phone while working fine on desktop. Opacity is a compositor-only
+   property, reliably GPU-accelerated on every mobile browser, so this
+   version blinks consistently everywhere. */
+.crossing-btn.active {
+  background: #FF8C00;
+  box-shadow: 0 1.2vh 0 #B35F00;
+}
+.crossing-btn.active::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 22px;
+  background: #FFB347;
+  opacity: 0;
+  animation: crossing-blink-opacity 1s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes crossing-blink-opacity {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crossing-btn.active::after { animation: none; opacity: 0; }
+}
+
+.crossing-road-label {
+  text-align: center; font-size: 3.6cqw; font-weight: 700;
+  color: var(--text-secondary); margin-top: 1.5vh;
+}

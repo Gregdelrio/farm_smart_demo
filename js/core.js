@@ -67,7 +67,7 @@ const FARMS = [
   // needs to change. `herdSize`/`ownerFirstName` are used by the Live
   // Milking tile, `roadName` by the Road Crossing tile.
 ];
-FarmSmart.activeFarmId = FARMS[0].id;
+FarmSmart.activeFarmId = 'maguires'; // default farm shown when the app first loads
 FarmSmart.getActiveFarm = function () {
   return FARMS.find((f) => f.id === FarmSmart.activeFarmId);
 };

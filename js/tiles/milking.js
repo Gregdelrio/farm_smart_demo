@@ -28,6 +28,11 @@ const MILKING_SPEED_RANGES = {
   laang:    [170, 190], // Peter
 };
 
+// %2TR = share of cows going through a second rotation (second pass)
+// this session. Fluctuates only slightly — same range for every farm,
+// no need for a per-farm table like speed above.
+const TWO_TR_RANGE = [7, 8]; // %
+
 FarmSmart.registerTile({
   id: 'milking',
 
@@ -44,6 +49,7 @@ FarmSmart.registerTile({
       <div class="milk-progress"><div class="fill" id="milkFill" style="width:77%;"></div></div>
       <div class="milk-stat-row">
         <div class="milk-stat-box"><p class="stat-label">Avg speed</p><p class="stat-value" id="milkSpeed">312/hr</p></div>
+        <div class="milk-stat-box"><p class="stat-label">%2TR</p><p class="stat-value" id="milk2trPct">7.5%</p></div>
         <div class="milk-stat-box"><p class="stat-label">Elapsed time</p><p class="stat-value" id="milkElapsed">35 min</p></div>
       </div>
     </div>
@@ -57,6 +63,9 @@ FarmSmart.registerTile({
     function randomInRange([min, max]) {
       return Math.round(min + Math.random() * (max - min));
     }
+    function randomDecimalInRange([min, max]) {
+      return (min + Math.random() * (max - min)).toFixed(1);
+    }
 
     function refreshForActiveFarm() {
       const farm = FarmSmart.getActiveFarm();
@@ -65,12 +74,17 @@ FarmSmart.registerTile({
       elapsedMinutes = 35;
       render();
       refreshSpeed();
+      refresh2trPct();
     }
 
     function refreshSpeed() {
       const farm = FarmSmart.getActiveFarm();
       const range = MILKING_SPEED_RANGES[farm.id] || [280, 320];
       document.getElementById('milkSpeed').textContent = randomInRange(range) + '/hr';
+    }
+
+    function refresh2trPct() {
+      document.getElementById('milk2trPct').textContent = randomDecimalInRange(TWO_TR_RANGE) + '%';
     }
 
     function refreshSyncBadge() {
@@ -93,6 +107,7 @@ FarmSmart.registerTile({
       }
       render();
       refreshSpeed();
+      refresh2trPct();
       refreshSyncBadge();
     }
 

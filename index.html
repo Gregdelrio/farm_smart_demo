@@ -8,6 +8,21 @@
 <meta name="theme-color" content="#1c1c1a">
 <title>FarmSmart</title>
 
+<!-- Favicon (browser tab icon) — favicon.ico covers older browsers,
+     the PNGs give modern browsers a sharper icon at the exact size
+     they need instead of scaling one image. -->
+<link rel="icon" href="icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+
+<!-- "Add to Home Screen" icon on iOS (Safari doesn't read manifest.json
+     for this — it specifically needs this tag). -->
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<!-- PWA manifest — this is what Android/Chrome use for "Add to Home
+     Screen"/"Install app", pulling icons/icon-192.png and icon-512.png. -->
+<link rel="manifest" href="manifest.json">
+
 <!-- Icon font. This is a CDN link: the icon files themselves are NOT
      part of this project, they're fetched from Cloudflare's public CDN
      the first time the page loads. Every <i class="ti ti-xxx"></i> tag
@@ -46,13 +61,16 @@
        Row 3: sync status pill
   ============================================================ -->
   <div class="app-header">
-    <div class="brand">FarmSmart</div>
+    <div class="brand-row">
+      <img class="brand-logo" src="icons/header-logo.png" alt="">
+      <div class="brand">FarmSmart</div>
+    </div>
 
     <div class="header-row">
       <button class="farm-picker" onclick="openFarmSheet()">
         <span class="eyebrow">Active farm</span>
         <span class="name-row">
-          <span class="name" id="activeFarmName">Laang Farm</span>
+          <span class="name" id="activeFarmName">Maguires Road Dairy</span>
           <i class="ti ti-chevron-down"></i>
         </span>
       </button>

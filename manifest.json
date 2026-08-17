@@ -1,0 +1,25 @@
+{
+  "name": "FarmSmart",
+  "short_name": "FarmSmart",
+  "description": "On-farm control dashboard for milk vat temperature, road crossing, live milking status, milk statement, and paddock gates.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1c1c1a",
+  "theme_color": "#1c1c1a",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

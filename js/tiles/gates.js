@@ -266,8 +266,19 @@ FarmSmart.registerTile({
     document.getElementById('openNowConfirmBtn').addEventListener('click', () => {
       const farm = FarmSmart.getActiveFarm();
       const code = composePaddockCode(farm.id, openNowPaddockWheelInstances.map((w) => w.getValue()));
-      closeOpenNowSheet();
-      showToast(`Paddock ${code} opened now`);
+
+      // The Open Now sheet stays open underneath while this confirms —
+      // if the person cancels, they land right back on the wheels
+      // instead of having to reopen the sheet from scratch.
+      openConfirm(
+        `Open paddock ${code} now?`,
+        `This will open paddock ${code} immediately.`,
+        'Open',
+        () => {
+          closeOpenNowSheet();
+          showToast(`Paddock ${code} opened now`);
+        }
+      );
     });
 
     // Close either sheet by tapping the dimmed background.

@@ -126,6 +126,7 @@ body { padding-bottom: 6vh; }
 .app-header { padding: 2rem 1.5rem 0.5rem; max-width: 640px; margin: 0 auto; }
 
 .brand-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.9rem; }
+.brand-logo { width: 1.4rem; height: 1.4rem; display: block; border-radius: 50%; }
 .brand {
   font-size: 0.8rem;
   font-weight: 800;
