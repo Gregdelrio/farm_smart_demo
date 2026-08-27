@@ -237,7 +237,7 @@ FarmSmart.randomSyncLabel = function () {
    ---------------------------------------------------------------------
    Sends a push notification to your phone every time someone opens the
    app, and a second one summarizing what they clicked when they leave.
-   Also used directly by the "Share the app" button (see index.html).
+   Also used directly by the "Share the demo" button (see index.html).
 
    SETUP — do this once:
      1. Install the ntfy app: https://ntfy.sh/ (App Store / Play Store).
@@ -353,16 +353,16 @@ document.addEventListener('visibilitychange', () => {
 
 document.addEventListener('DOMContentLoaded', notifyAppOpened);
 
-// ---- "Share the app" button ----
+// ---- "Share the demo" button ----
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('shareAppBtn').addEventListener('click', async () => {
+  document.getElementById('shareDemoBtn').addEventListener('click', async () => {
     // Notified immediately on tap (not batched into the session-end
     // summary) — the person asked to know right away when this
     // specific button is used, regardless of what the person does in
     // the share sheet afterwards (send it, or cancel).
     const v = FarmSmart.visitorInfo;
     sendNtfy(`IP: ${v.ip} · ${v.location}\nDevice: ${v.device}\nTime: ${new Date().toLocaleString()}`, {
-      title: '📤 Someone tapped "Share the app"',
+      title: '📤 Someone tapped "Share the demo"',
       tags: 'loudspeaker',
     });
 
