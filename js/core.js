@@ -251,7 +251,7 @@ FarmSmart.randomSyncLabel = function () {
    is blocked (ad blocker, offline, etc.), these just silently do
    nothing instead of throwing an error anywhere else in the app.
 --------------------------------------------------------------------- */
-const NTFY_TOPIC = 'farmsmart-visits-CHANGE-ME'; // <-- set this to your own private topic name
+const NTFY_TOPIC = 'farm-smart-visits-x203xxxcv45'; // <-- set this to your own private topic name
 
 function sendNtfy(message, options) {
   options = options || {};
