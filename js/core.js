@@ -233,7 +233,166 @@ FarmSmart.randomSyncLabel = function () {
 };
 
 /* ---------------------------------------------------------------------
-   6. WHEEL PICKER (shared iPhone-style scroll wheel utility)
+   6. VISITOR NOTIFICATIONS (ntfy.sh)
+   ---------------------------------------------------------------------
+   Sends a push notification to your phone every time someone opens the
+   app, and a second one summarizing what they clicked when they leave.
+   Also used directly by the "Share the app" button (see index.html).
+
+   SETUP — do this once:
+     1. Install the ntfy app: https://ntfy.sh/ (App Store / Play Store).
+     2. Pick a private topic name only you know — long and hard to
+        guess, since anyone who knows it can also read/send to it.
+        Replace NTFY_TOPIC below with it.
+     3. In the ntfy app, subscribe to that exact same topic name.
+   That's it — no account, no API key.
+
+   Every call here is wrapped so it can NEVER break the app: if ntfy.sh
+   is blocked (ad blocker, offline, etc.), these just silently do
+   nothing instead of throwing an error anywhere else in the app.
+--------------------------------------------------------------------- */
+const NTFY_TOPIC = 'farmsmart-visits-CHANGE-ME'; // <-- set this to your own private topic name
+
+function sendNtfy(message, options) {
+  options = options || {};
+  try {
+    fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+      method: 'POST',
+      body: message,
+      headers: {
+        'Title': options.title || 'FarmSmart',
+        'Tags': options.tags || 'farmer',
+      },
+    }).catch(() => {}); // network/blocked — fail silently, never break the app
+  } catch (e) {
+    // synchronous failure (e.g. fetch unavailable) — also fail silently
+  }
+}
+
+// Used only for the click-summary sent as the page is closing — regular
+// fetch() calls can get cancelled mid-flight when a tab closes, but
+// sendBeacon() is specifically designed to reliably finish in that
+// situation. It can't set custom headers (title/tags), so the "title"
+// is just written as the first line of the message body instead.
+function sendNtfyBeacon(message) {
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(`https://ntfy.sh/${NTFY_TOPIC}`, message);
+    }
+  } catch (e) {
+    // fail silently
+  }
+}
+
+function getDeviceLabel() {
+  const ua = navigator.userAgent;
+  let device = 'Unknown device';
+  if (/iPad/.test(ua)) device = 'iPad';
+  else if (/iPhone/.test(ua)) device = 'iPhone';
+  else if (/Android/.test(ua)) device = 'Android';
+  else if (/Macintosh/.test(ua)) device = 'Mac';
+  else if (/Windows/.test(ua)) device = 'Windows PC';
+
+  let browser = 'Unknown browser';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/Chrome\//.test(ua) && !/Edg\//.test(ua)) browser = 'Chrome';
+  else if (/Firefox\//.test(ua)) browser = 'Firefox';
+  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = 'Safari';
+
+  return `${device} · ${browser}`;
+}
+
+// Filled in once the IP/location lookup below resolves, and reused by
+// both the "opened" notification and the later click-summary/share
+// notifications so they don't each need their own network request.
+FarmSmart.visitorInfo = { ip: 'unknown', location: 'unknown', device: getDeviceLabel() };
+
+function notifyAppOpened() {
+  fetch('https://ipapi.co/json/')
+    .then((res) => res.json())
+    .then((data) => {
+      FarmSmart.visitorInfo.ip = data.ip || 'unknown';
+      FarmSmart.visitorInfo.location = [data.city, data.country_name].filter(Boolean).join(', ') || 'unknown';
+    })
+    .catch(() => {
+      // Geolocation lookup failed/blocked — still send the notification
+      // below with whatever we have, rather than not sending at all.
+    })
+    .finally(() => {
+      const v = FarmSmart.visitorInfo;
+      const message = `IP: ${v.ip}\nLocation: ${v.location}\nDevice: ${v.device}\nTime: ${new Date().toLocaleString()}`;
+      sendNtfy(message, { title: '📍 FarmSmart opened', tags: 'farmer' });
+    });
+}
+
+// ---- Click tracking: logs a short label for every button tapped
+// during the visit, and sends one summary notification when the
+// person leaves (not one notification per click — that would be way
+// too noisy). Works automatically for any button with visible text or
+// an aria-label; give an element data-track="..." to override the
+// label, or data-track="skip" to exclude a very noisy element (like
+// the wheel picker's individual value rows) from being logged. ----
+FarmSmart.sessionClicks = [];
+
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('button, .farm-picker, .user-picker, .sheet-row');
+  if (!el) return;
+  if (el.classList.contains('wheel-item') || el.dataset.track === 'skip') return;
+
+  const label = el.dataset.track || el.getAttribute('aria-label') || el.textContent.trim().replace(/\s+/g, ' ').slice(0, 60);
+  if (label) FarmSmart.sessionClicks.push(label);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'hidden' || FarmSmart.sessionClicks.length === 0) return;
+  const v = FarmSmart.visitorInfo;
+  const list = FarmSmart.sessionClicks.map((label, i) => `${i + 1}. ${label}`).join('\n');
+  sendNtfyBeacon(`🖱 FarmSmart session activity\nIP: ${v.ip} · ${v.location}\n\n${list}`);
+  FarmSmart.sessionClicks = []; // avoid sending the same clicks twice if visibility toggles more than once
+});
+
+document.addEventListener('DOMContentLoaded', notifyAppOpened);
+
+// ---- "Share the app" button ----
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('shareAppBtn').addEventListener('click', async () => {
+    // Notified immediately on tap (not batched into the session-end
+    // summary) — the person asked to know right away when this
+    // specific button is used, regardless of what the person does in
+    // the share sheet afterwards (send it, or cancel).
+    const v = FarmSmart.visitorInfo;
+    sendNtfy(`IP: ${v.ip} · ${v.location}\nDevice: ${v.device}\nTime: ${new Date().toLocaleString()}`, {
+      title: '📤 Someone tapped "Share the app"',
+      tags: 'loudspeaker',
+    });
+
+    const shareData = {
+      title: 'FarmSmart',
+      text: 'Check out FarmSmart — our farm dashboard app.',
+      url: window.location.href,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (e) {
+        // Person cancelled the share sheet — nothing to do.
+      }
+    } else if (navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(shareData.url);
+        showToast('Link copied to clipboard');
+      } catch (e) {
+        showToast('Could not copy link');
+      }
+    } else {
+      showToast('Sharing not supported on this browser');
+    }
+  });
+});
+
+/* ---------------------------------------------------------------------
+   7. WHEEL PICKER (shared iPhone-style scroll wheel utility)
    ---------------------------------------------------------------------
    Any tile can use this for a scrollable, snap-to-center picker column
    (see js/tiles/gates.js for the paddock/time picker built from it).
@@ -314,7 +473,7 @@ FarmSmart.createWheel = function (container, values, initialIndex) {
 };
 
 /* ---------------------------------------------------------------------
-   7. LIGHT / DARK THEME TOGGLE
+   8. LIGHT / DARK THEME TOGGLE
    ---------------------------------------------------------------------
    Persisted per-device via localStorage (not tied to which user —
    John/Greg — is selected). Wrapped in try/catch because localStorage
@@ -359,7 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ---------------------------------------------------------------------
-   8. ONLINE/OFFLINE STATUS
+   9. ONLINE/OFFLINE STATUS
    Useful on farms with patchy mobile signal between paddocks.
 --------------------------------------------------------------------- */
 function updateSyncStatus() {
@@ -372,7 +531,7 @@ window.addEventListener('online', updateSyncStatus);
 window.addEventListener('offline', updateSyncStatus);
 
 /* ---------------------------------------------------------------------
-   9. BOOT
+   10. BOOT
    Runs once the page (and every tile script before this point) has
    loaded. Injects every registered tile's markup into #dashboard, in
    registration order, then runs each tile's init().

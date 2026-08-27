@@ -375,6 +375,37 @@ avoid any dependency on this — see "Back button icon" above.)
 
 ---
 
+## Visitor notifications (ntfy.sh) & Share the app
+
+Every time someone opens the app, and again when they leave (a summary
+of what they clicked), a push notification is sent to your phone via
+[ntfy.sh](https://ntfy.sh) — see `js/core.js` §6 for the full setup
+instructions in the code comment, but the short version:
+
+1. Install the **ntfy** app (iOS/Android).
+2. Pick a private topic name only you know, and set it as `NTFY_TOPIC`
+   at the top of `js/core.js` §6 (currently a placeholder —
+   **`'farmsmart-visits-CHANGE-ME'`, replace this before deploying**).
+3. Subscribe to that same topic name inside the ntfy app.
+
+Each notification includes IP + approximate location (via a free
+IP-geolocation lookup), device/browser, and time. Click tracking is
+generic — any `<button>` (or `.farm-picker`/`.user-picker`/
+`.sheet-row`) tapped anywhere in the app gets logged automatically
+using its visible text as the label; give an element
+`data-track="Custom label"` to override that label, or
+`data-track="skip"` to exclude a noisy one.
+
+**"Share the app"** (bottom of the dashboard) opens the phone's native
+share sheet (Messages, WhatsApp, Messenger, whatever's installed) via
+the Web Share API, falling back to "copy link" on desktop browsers
+that don't support it. Tapping it also fires its own *immediate* ntfy
+notification (separate from the click-tracking summary), since that
+was asked for specifically.
+
+Every ntfy call is wrapped so it can never break the app — if it's
+blocked (ad blocker, offline, etc.), it just fails silently.
+
 ## Run it
 
 Open `index.html` directly, or for best results (and for the PWA

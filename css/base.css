@@ -239,6 +239,16 @@ body { padding-bottom: 6vh; }
 .card-btn:active { transform: scale(0.98); }
 .card-btn.primary { background: var(--accent-yellow); color: #1c1c1a; }
 
+/* Share the app — sits below the dashboard, not inside any tile, so it
+   needs its own max-width/centering to match the rest of the app on
+   desktop (tiles get this for free from #dashboard's grid). */
+.share-row {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 1.5rem 2rem;
+}
+.share-row .card-btn { margin-top: 0; }
+
 /* ---------------------------------------------------------------------
    3b. RESPONSIVE DASHBOARD GRID
    Below 760px: #dashboard is a normal block, tiles stack top to

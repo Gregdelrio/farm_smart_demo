@@ -17,22 +17,43 @@
   position: relative;
 }
 .crossing-btn:active { transform: translateY(0.8vh); box-shadow: 0 0.4vh 0 #C99604; }
-.crossing-btn i { font-size: 9cqw; margin-bottom: 0.5vh; }
-.crossing-btn .line1 { font-size: 6cqw; font-weight: 800; letter-spacing: 1px; }
-.crossing-btn .line2 { font-size: 3.4cqw; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 0.3vh; }
+.crossing-btn i { font-size: 9cqw; margin-bottom: 0.5vh; position: relative; z-index: 1; }
+.crossing-btn .line1 { font-size: 6cqw; font-weight: 800; letter-spacing: 1px; position: relative; z-index: 1; }
+.crossing-btn .line2 { font-size: 3.4cqw; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 0.3vh; position: relative; z-index: 1; }
 
 /* Active state: blinking orange, not the static red used for a REAL
    alert elsewhere in the app (vat temperature out of range) — this is
-   a "live action in progress" state, not a danger warning. */
+   a "live action in progress" state, not a danger warning.
+
+   IMPLEMENTATION NOTE: the base background switches to solid orange
+   (no animation on it), and the "blink" is a separate ::after overlay
+   that pulses its OPACITY on top. Animating background-color directly
+   (an earlier version of this file did) forces the browser to repaint
+   every frame, which many mobile browsers throttle or skip entirely
+   to save battery — the blink could look completely static on a
+   phone while working fine on desktop. Opacity is a compositor-only
+   property, reliably GPU-accelerated on every mobile browser, so this
+   version blinks consistently everywhere. */
 .crossing-btn.active {
-  animation: crossing-blink 1s ease-in-out infinite;
+  background: #FF8C00;
+  box-shadow: 0 1.2vh 0 #B35F00;
 }
-@keyframes crossing-blink {
-  0%, 100% { background: #FF8C00; box-shadow: 0 1.2vh 0 #B35F00; }
-  50%      { background: #FFB347; box-shadow: 0 1.2vh 0 #CC7A00; }
+.crossing-btn.active::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 22px;
+  background: #FFB347;
+  opacity: 0;
+  animation: crossing-blink-opacity 1s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes crossing-blink-opacity {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .crossing-btn.active { animation: none; background: #FF8C00; box-shadow: 0 1.2vh 0 #B35F00; }
+  .crossing-btn.active::after { animation: none; opacity: 0; }
 }
 
 .crossing-road-label {
