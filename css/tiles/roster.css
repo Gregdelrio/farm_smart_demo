@@ -1,0 +1,130 @@
+/* =====================================================================
+   TILE: FARM ROSTER
+   ---------------------------------------------------------------------
+   Everyone (John, Greg) sees the same weekly grid; only Owner-role
+   users get the edit controls (Generate, Clear, Manage Employees,
+   Farm Staffing) and can tap a cell to change it — see the role check
+   in js/tiles/roster.js init().
+   ===================================================================== */
+
+.roster-week-label { font-size: 3.4cqw; color: var(--text-secondary); font-weight: 600; margin: 0 0 2vh; }
+
+.roster-action-row { display: flex; flex-wrap: wrap; gap: 2cqw; margin-top: 2vh; }
+.roster-action-row .card-btn { flex: 1; min-width: 40%; margin-top: 0; }
+
+/* ---- The grid itself ---- */
+.roster-grid-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 1.5rem 1.5rem;
+  border-radius: 16px;
+  border: 1px solid var(--border-card);
+}
+.roster-grid {
+  display: grid;
+  grid-template-columns: 108px repeat(7, 56px);
+  min-width: max-content;
+}
+.roster-grid-cell {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border-divider);
+  border-right: 1px solid var(--border-divider);
+  font-size: 0.8rem;
+}
+.roster-grid-cell:last-child { border-right: none; }
+
+.roster-name-cell {
+  position: sticky; left: 0; z-index: 2;
+  background: var(--bg-card-alt);
+  justify-content: flex-start;
+  padding: 0 0.75rem;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+.roster-day-header {
+  background: var(--bg-card-alt);
+  flex-direction: column;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  padding: 0.4rem 0;
+}
+.roster-day-header .dow { font-size: 0.72rem; }
+.roster-day-header .dom { color: var(--text-muted); font-weight: 600; }
+.roster-corner { background: var(--bg-card-alt); }
+
+.roster-cell-btn {
+  width: 100%; height: 100%; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 0.85rem; color: #fff;
+  background: transparent;
+}
+.roster-cell-btn.is-off { background: var(--bg-card); color: var(--text-faint); font-size: 0.65rem; font-weight: 700; }
+.roster-cell-btn:disabled { cursor: default; }
+
+/* ---- Farm color legend ---- */
+.roster-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0 1.5rem 1.5rem; }
+.roster-legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; }
+.roster-legend-swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+
+/* ---- Cell-edit sheet: a colored row per farm + Day Off + Clear ---- */
+.roster-option-row {
+  width: 100%; display: flex; align-items: center; gap: 0.75rem;
+  background: var(--bg-card); border: 1px solid var(--border-card);
+  border-radius: 14px; padding: 1rem 1.1rem; margin-bottom: 0.75rem;
+  color: var(--text-primary); font-weight: 700; font-size: 1rem; cursor: pointer;
+}
+.roster-option-swatch { width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0; }
+.roster-option-swatch.off { background: var(--bg-card-alt); border: 1px dashed var(--text-faint); }
+
+/* ---- Manage Employees sheet ---- */
+.roster-emp-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 14px;
+  padding: 1rem 1.1rem; margin-bottom: 0.75rem;
+}
+.roster-emp-row__info { display: flex; flex-direction: column; gap: 0.25rem; text-align: left; flex: 1; min-width: 0; }
+.roster-emp-row__name { font-weight: 800; font-size: 1rem; }
+.roster-emp-row__meta { font-size: 0.78rem; color: var(--text-muted); }
+.roster-emp-row__actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.roster-emp-row__edit, .roster-emp-row__delete {
+  width: 2rem; height: 2rem; border-radius: 50%; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.roster-emp-row__edit { background: var(--bg-card-alt); color: var(--text-primary); }
+.roster-emp-row__delete { background: var(--color-red-bg); color: var(--color-red); }
+.roster-emp-row__edit svg, .roster-emp-row__delete svg { width: 0.9rem; height: 0.9rem; }
+
+/* ---- Employee edit form ---- */
+.roster-form-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin: 0 1.5rem 0.5rem; }
+.roster-text-input {
+  width: calc(100% - 3rem); margin: 0 1.5rem 1.5rem; display: block;
+  background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px;
+  padding: 0.9rem 1rem; color: var(--text-primary); font-size: 1rem; font-family: inherit;
+}
+.roster-chip-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0 1.5rem 1.5rem; }
+.roster-chip {
+  border: 1px solid var(--border-card); background: var(--bg-card); color: var(--text-secondary);
+  border-radius: 999px; padding: 0.6rem 1.1rem; font-weight: 700; font-size: 0.85rem; cursor: pointer;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.roster-chip .roster-legend-swatch { opacity: 0.4; }
+.roster-chip.active { border-color: transparent; color: #fff; }
+.roster-chip.active .roster-legend-swatch { opacity: 1; }
+
+/* ---- Farm staffing steppers ---- */
+.roster-staffing-row { margin: 0 1.5rem 1.5rem; background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 16px; padding: 1.2rem; }
+.roster-staffing-row__title { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1rem; margin-bottom: 1rem; }
+.roster-stepper-group { display: flex; gap: 1rem; }
+.roster-stepper { flex: 1; text-align: center; }
+.roster-stepper__label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 0.4rem; }
+.roster-stepper__controls { display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
+.roster-stepper__btn {
+  width: 2rem; height: 2rem; border-radius: 50%; border: none; background: var(--bg-card-alt);
+  color: var(--text-primary); font-weight: 800; font-size: 1.1rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.roster-stepper__value { font-size: 1.1rem; font-weight: 800; min-width: 1.5rem; }

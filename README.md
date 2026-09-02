@@ -28,6 +28,7 @@ farmsmart/
 │       ├── milking.css        Live Milking
 │       ├── milk-statement.css Milk Statement
 │       └── gates.css          Paddock Gates (wheel pickers, schedule list)
+│       └── roster.css         Farm Roster (weekly grid, employee/staffing sheets)
 │
 ├── js/
 │   ├── core.js                App shell: tile registry/mount system,
@@ -40,6 +41,7 @@ farmsmart/
 │       ├── milking.js         Live Milking — markup + behavior
 │       ├── milk-statement.js  Milk Statement — markup + behavior
 │       └── gates.js           Paddock Gates — markup + behavior
+│       └── roster.js          Farm Roster — markup + behavior + generator
 │
 └── icons/
     ├── logo-master.png        High-res source (512×512) — reference
@@ -268,6 +270,35 @@ farm. The schedule list itself is per-farm (`scheduleByFarm` in
 entry beyond the first (shown big at the top) appears as a small row
 with its own red ✕ to remove it, no confirmation needed — a typo is
 one tap to fix.
+
+### Farm Roster
+A weekly staffing table across all three farms at once (not filtered
+by the active farm switcher). Roster employees are **completely
+separate from FarmSmart user accounts** — John/Greg stay the only two
+logins; the roster manages its own list of workers (name, which
+farm(s) they're trained for, an optional couple partner), entirely
+independent of who's signed in.
+
+- **Read-only for Greg, fully editable for John** (`FarmSmart.currentUser.role`
+  check in `js/tiles/roster.js`) — unlike Milk Statement, the tile
+  itself stays visible for Greg, just without any edit buttons, and
+  the grid cells are disabled rather than the whole tile disappearing.
+- **Workflow**: type in a few known constraints by hand first (tap a
+  cell → pick a farm or "Day Off" for that person on that day), *then*
+  tap "Generate Roster" — generation only fills cells still blank, it
+  never overwrites anything already set, and every cell stays editable
+  afterwards too.
+- **Couples** (`partnerId` on an employee) always share the same 2
+  weekly days off, and the generator tries, best-effort, to also put
+  them on the same farm on days they both work — see the two-pass
+  algorithm in `generateRoster()` in `js/tiles/roster.js`.
+- **"Manage Employees"** — add/edit/delete workers, set which farm(s)
+  each is trained for and their couple partner (if any).
+- **"Farm Staffing"** — min/ideal/max headcount per farm per day, used
+  as the generator's target (`ROSTER_FARM_CONFIG` in `js/tiles/roster.js`).
+- No week navigation yet (a single "this week" grid, computed from
+  today's date) and no visual warning if a constraint can't be
+  satisfied — both deliberately out of scope for now.
 
 ---
 
