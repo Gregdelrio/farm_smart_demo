@@ -90,27 +90,15 @@
   display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
   background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 14px;
   padding: 1rem 1.1rem; margin-bottom: 0.75rem;
-  border-top: 2px solid transparent; /* keeps row height stable when .drag-over adds a visible top border */
 }
-/* The row currently being dragged: lifted slightly above the rest,
-   follows the pointer via a translateY set in JS (not here). */
-.roster-emp-row.dragging {
-  position: relative; z-index: 20;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.35);
-  background: var(--bg-card-alt);
-}
-/* The row the dragged item is currently hovering over — a top border
-   previews where it will land if released now. */
-.roster-emp-row.drag-over { border-top-color: var(--accent-yellow); }
-
-.roster-emp-row__handle {
-  width: 1.75rem; height: 1.75rem; border-radius: 8px; border: none; cursor: grab;
-  background: var(--bg-card-alt); color: var(--text-muted); flex-shrink: 0;
+.roster-emp-row__reorder { display: flex; flex-direction: column; gap: 0.15rem; flex-shrink: 0; }
+.roster-emp-row__move {
+  width: 1.6rem; height: 1.4rem; border-radius: 6px; border: none; cursor: pointer;
+  background: var(--bg-card-alt); color: var(--text-secondary);
   display: flex; align-items: center; justify-content: center;
-  touch-action: none; /* stops the page from scrolling while dragging on a touchscreen */
 }
-.roster-emp-row__handle svg { width: 1.1rem; height: 1.1rem; }
-.roster-emp-row.dragging .roster-emp-row__handle { cursor: grabbing; }
+.roster-emp-row__move svg { width: 0.85rem; height: 0.85rem; }
+.roster-emp-row__move:disabled { opacity: 0.25; cursor: default; }
 .roster-emp-row__info { display: flex; flex-direction: column; gap: 0.25rem; text-align: left; flex: 1; min-width: 0; }
 .roster-emp-row__name { font-weight: 800; font-size: 1rem; }
 .roster-emp-row__meta { font-size: 0.78rem; color: var(--text-muted); }
@@ -169,3 +157,21 @@
 .roster-staffing-check__list { list-style: none; padding: 0; margin: 0; font-weight: 600; }
 .roster-staffing-check__list li { padding: 0.2rem 0; }
 .roster-staffing-check.neutral { background: var(--bg-card-alt); color: var(--text-secondary); }
+
+/* ---- Compact roster preview, shown directly on the dashboard card ---- */
+.roster-grid-wrap--card {
+  margin: 0 0 1rem;
+  max-height: 230px;
+  overflow-y: auto;
+}
+.roster-grid-wrap--card .roster-grid { grid-template-columns: 84px repeat(7, 44px); }
+.roster-grid-wrap--card .roster-grid-cell { min-height: 34px; font-size: 0.68rem; }
+.roster-grid-wrap--card .roster-name-cell { font-size: 0.68rem; padding: 0 0.5rem; }
+.roster-grid-wrap--card .roster-cell-btn { font-size: 0.68rem; }
+.roster-grid-wrap--card .roster-day-header { font-size: 0.6rem; padding: 0.3rem 0; }
+
+.roster-legend--card { margin: 0 0 1rem; gap: 0.6rem; }
+.roster-legend--card .roster-legend-item { font-size: 0.7rem; }
+.roster-legend--card .roster-legend-swatch { width: 11px; height: 11px; }
+
+.roster-preview-hint { font-size: 0.72rem; color: var(--text-muted); text-align: center; margin: 0 0 0.75rem; }

@@ -285,6 +285,9 @@ FarmSmart.registerTile({
         <span class="card-title"><i class="ti ti-calendar-week"></i>Farm Roster</span>
       </div>
       <p class="roster-week-label" id="rosterWeekLabel">This week</p>
+      <div class="roster-legend roster-legend--card" id="rosterLegendCard"></div>
+      <div class="roster-grid-wrap roster-grid-wrap--card"><div class="roster-grid" id="rosterGridCardEl"></div></div>
+      <p class="roster-preview-hint">Tap "View Roster" to edit</p>
       <button class="card-btn primary" id="rosterOpenBtn"><i class="ti ti-table"></i>View Roster</button>
     </div>
 
@@ -373,17 +376,25 @@ FarmSmart.registerTile({
     }
 
     // ---- Legend ----
+    // Populates BOTH the compact one on the dashboard card and the
+    // full one inside the overlay — same content, just two spots on
+    // the page since the card now shows a live preview too.
     function renderLegend() {
-      const el = document.getElementById('rosterLegend');
-      el.innerHTML = Object.keys(ROSTER_FARM_CONFIG).map((farmId) => `
+      const html = Object.keys(ROSTER_FARM_CONFIG).map((farmId) => `
         <span class="roster-legend-item"><span class="roster-legend-swatch" style="background:${ROSTER_FARM_CONFIG[farmId].color};"></span>${farmName(farmId)}</span>
       `).join('') + `<span class="roster-legend-item"><span class="roster-legend-swatch" style="background:var(--bg-card-alt);border:1px dashed var(--text-faint);"></span>Day off</span>`;
+      const overlayEl = document.getElementById('rosterLegend');
+      if (overlayEl) overlayEl.innerHTML = html;
+      const cardEl = document.getElementById('rosterLegendCard');
+      if (cardEl) cardEl.innerHTML = html;
     }
 
     // ---- Main grid ----
-    function renderGrid() {
+    // Builds the grid's HTML once; `readOnly` strips interactivity for
+    // the dashboard card's preview (buttons render disabled, no click
+    // listeners attached) — full editing stays behind "View Roster".
+    function buildGridHtml(readOnly) {
       const dates = weekDates();
-      const el = document.getElementById('rosterGridEl');
       let html = `<div class="roster-grid-cell roster-corner roster-name-cell">Employee</div>`;
       dates.forEach((d, i) => {
         html += `<div class="roster-grid-cell roster-day-header"><span class="dow">${DOW_LABELS[i]}</span><span class="dom">${d.getDate()}/${d.getMonth() + 1}</span></div>`;
@@ -396,19 +407,34 @@ FarmSmart.registerTile({
           const isOff = val === 'off';
           const bg = val && !isOff ? ROSTER_FARM_CONFIG[val].color : 'transparent';
           const label = isOff ? 'OFF' : (val ? farmInitial(val) : '');
+          const disabledAttr = (readOnly || !isOwner()) ? 'disabled' : '';
           html += `<div class="roster-grid-cell">
-            <button class="roster-cell-btn${isOff ? ' is-off' : ''}" style="background:${bg};" data-emp="${emp.id}" data-day="${d}" ${isOwner() ? '' : 'disabled'}>${label}</button>
+            <button class="roster-cell-btn${isOff ? ' is-off' : ''}" style="background:${bg};" data-emp="${emp.id}" data-day="${d}" ${disabledAttr}>${label}</button>
           </div>`;
         }
       });
-      el.innerHTML = html;
+      return html;
+    }
 
-      el.querySelectorAll('.roster-cell-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          if (!isOwner()) return;
-          openCellSheet(btn.dataset.emp, parseInt(btn.dataset.day, 10));
+    function renderGrid() {
+      // Overlay grid: interactive (Owner only — buildGridHtml already
+      // disables buttons for Greg via the isOwner() check inside it).
+      const overlayEl = document.getElementById('rosterGridEl');
+      if (overlayEl) {
+        overlayEl.innerHTML = buildGridHtml(false);
+        overlayEl.querySelectorAll('.roster-cell-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            if (!isOwner()) return;
+            openCellSheet(btn.dataset.emp, parseInt(btn.dataset.day, 10));
+          });
         });
-      });
+      }
+
+      // Card preview: same data, always read-only, no listeners — a
+      // glance at the current roster right on the dashboard, tapping
+      // "View Roster" is still how you actually edit it.
+      const cardEl = document.getElementById('rosterGridCardEl');
+      if (cardEl) cardEl.innerHTML = buildGridHtml(true);
     }
 
     function renderAll() {
@@ -748,6 +774,7 @@ FarmSmart.registerTile({
 
     document.addEventListener('farmsmart:userchanged', applyRolePermissions);
     applyRolePermissions();
+    renderLegend();
     renderWeekLabel();
   },
 });
