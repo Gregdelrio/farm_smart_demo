@@ -37,6 +37,12 @@ const ROSTER_FARM_CONFIG = {
 
 const WEEKLY_DAYS_OFF = 2; // fixed for every employee, per week
 
+// Reusable red-X icon (used for "Clear" in the cell sheet and the
+// delete button in Manage Employees) — visually distinct from the
+// dashed gray square used for "Day Off", so the two can't be confused
+// when tapping a cell.
+const ROSTER_DELETE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
 // Demo roster staff — freely editable/removable once the tile is
 // running (see "Manage Employees"). partnerId links two employees as
 // a couple: they always share the same off-days, and the generator
@@ -57,6 +63,91 @@ function ensureGridRow(empId) {
   if (!rosterGrid[empId]) rosterGrid[empId] = Array(7).fill(null);
 }
 rosterEmployees.forEach((e) => ensureGridRow(e.id));
+
+// ---------------------------------------------------------------------
+// PERSISTENCE — employees and farm staffing survive a page reload /
+// the next time you open the app, saved to this device's browser via
+// localStorage (same pattern as the light/dark theme toggle in
+// js/core.js). The demo baseline above is only ever used the very
+// first time (or on a browser/device that's never saved anything) —
+// after that, whatever you edit in "Manage Employees" or "Farm
+// Staffing" is what loads back in. Wrapped in try/catch throughout so
+// a blocked/unavailable localStorage never breaks the tile — it just
+// won't remember between visits on that device.
+// ---------------------------------------------------------------------
+const ROSTER_EMPLOYEES_STORAGE_KEY = 'farmsmart-roster-employees';
+const ROSTER_STAFFING_STORAGE_KEY = 'farmsmart-roster-staffing';
+
+function saveEmployeesToStorage() {
+  try {
+    localStorage.setItem(ROSTER_EMPLOYEES_STORAGE_KEY, JSON.stringify(rosterEmployees));
+  } catch (e) { /* storage unavailable — edits still work this session */ }
+}
+function loadEmployeesFromStorage() {
+  try {
+    const raw = localStorage.getItem(ROSTER_EMPLOYEES_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (Array.isArray(saved) && saved.length > 0) {
+      rosterEmployees = saved;
+      rosterGrid = {};
+      rosterEmployees.forEach((e) => ensureGridRow(e.id));
+    }
+  } catch (e) { /* ignore corrupt/unavailable storage, fall back to the demo baseline */ }
+}
+
+function saveStaffingToStorage() {
+  try {
+    localStorage.setItem(ROSTER_STAFFING_STORAGE_KEY, JSON.stringify(ROSTER_FARM_CONFIG));
+  } catch (e) { /* storage unavailable — edits still work this session */ }
+}
+function loadStaffingFromStorage() {
+  try {
+    const raw = localStorage.getItem(ROSTER_STAFFING_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    Object.keys(saved).forEach((farmId) => {
+      if (!ROSTER_FARM_CONFIG[farmId]) return; // ignore a farm id no longer in the app
+      ['min', 'ideal', 'max'].forEach((key) => {
+        if (typeof saved[farmId][key] === 'number') ROSTER_FARM_CONFIG[farmId][key] = saved[farmId][key];
+      });
+      // Colors stay whatever's defined in code above — never loaded
+      // from storage, so a future palette change always takes effect.
+    });
+  } catch (e) { /* ignore corrupt/unavailable storage, fall back to the defaults above */ }
+}
+
+const ROSTER_GRID_STORAGE_KEY = 'farmsmart-roster-grid';
+
+function saveGridToStorage() {
+  try {
+    localStorage.setItem(ROSTER_GRID_STORAGE_KEY, JSON.stringify(rosterGrid));
+  } catch (e) { /* storage unavailable — edits still work this session */ }
+}
+function loadGridFromStorage() {
+  try {
+    const raw = localStorage.getItem(ROSTER_GRID_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    // Only accept a saved row for an employee who still exists, and
+    // only if it's shaped like a real 7-day row — this is what keeps
+    // things safe if an employee was deleted (or the file structure
+    // ever changes) since the grid was last saved.
+    rosterEmployees.forEach((e) => {
+      if (Array.isArray(saved[e.id]) && saved[e.id].length === 7) {
+        rosterGrid[e.id] = saved[e.id];
+      }
+    });
+  } catch (e) { /* ignore corrupt/unavailable storage, fall back to a blank grid */ }
+}
+
+// Load any saved data immediately, so it's already in place before
+// the tile even mounts. Grid loads LAST, after employees — so it only
+// ever restores rows for employees who are actually still around.
+loadEmployeesFromStorage();
+loadStaffingFromStorage();
+loadGridFromStorage();
+
 
 function slugify(name) {
   let base = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '');
@@ -338,13 +429,14 @@ FarmSmart.registerTile({
         html += `<button class="roster-option-row" data-value="${farmId}"><span class="roster-option-swatch" style="background:${ROSTER_FARM_CONFIG[farmId].color};"></span>${farmName(farmId)}</button>`;
       });
       html += `<button class="roster-option-row" data-value="off"><span class="roster-option-swatch off"></span>Day Off</button>`;
-      html += `<button class="roster-option-row" data-value=""><span class="roster-option-swatch off"></span>Clear</button>`;
+      html += `<button class="roster-option-row" data-value=""><span class="roster-option-swatch clear">${ROSTER_DELETE_ICON_SVG}</span>Clear</button>`;
       optionsEl.innerHTML = html;
 
       optionsEl.querySelectorAll('.roster-option-row').forEach((row) => {
         row.addEventListener('click', () => {
           const v = row.dataset.value;
           rosterGrid[cellSheetTarget.empId][cellSheetTarget.dayIndex] = v || null;
+          saveGridToStorage();
           closeCellSheet();
           renderGrid();
         });
@@ -362,14 +454,17 @@ FarmSmart.registerTile({
         const partner = emp.partnerId ? rosterEmployees.find((e) => e.id === emp.partnerId) : null;
         const meta = partner ? `${farmsLabel} · Couple with ${partner.name}` : farmsLabel;
         return `
-          <div class="roster-emp-row">
+          <div class="roster-emp-row" data-id="${emp.id}">
+            <button class="roster-emp-row__handle" aria-label="Drag to reorder" type="button">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+            </button>
             <div class="roster-emp-row__info">
               <span class="roster-emp-row__name">${emp.name}</span>
               <span class="roster-emp-row__meta">${meta}</span>
             </div>
             <div class="roster-emp-row__actions">
               <button class="roster-emp-row__edit" data-id="${emp.id}" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
-              <button class="roster-emp-row__delete" data-id="${emp.id}" aria-label="Delete">${'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'}</button>
+              <button class="roster-emp-row__delete" data-id="${emp.id}" aria-label="Delete">${ROSTER_DELETE_ICON_SVG}</button>
             </div>
           </div>`;
       }).join('');
@@ -383,8 +478,102 @@ FarmSmart.registerTile({
           rosterEmployees = rosterEmployees.filter((e) => e.id !== id);
           rosterEmployees.forEach((e) => { if (e.partnerId === id) e.partnerId = null; });
           delete rosterGrid[id];
+          saveEmployeesToStorage();
+          saveGridToStorage();
           renderEmployeesList();
           renderGrid();
+        });
+      });
+
+      attachDragHandlers(el);
+    }
+
+    // ---- Drag-to-reorder ----
+    // Works with mouse AND touch via the Pointer Events API (one set
+    // of listeners covers both). Only the dragged row moves visually
+    // (a simple translateY, following the pointer) — the other rows'
+    // positions are captured ONCE at drag-start and never re-measured
+    // mid-drag, which keeps the math simple and reliable. The row
+    // currently under the dragged item gets a highlighted top border
+    // as a drop-target preview; the actual array reorder (and the
+    // matching update to the roster grid's row order, since
+    // renderGrid() iterates rosterEmployees in this same order) only
+    // happens once, on release.
+    function attachDragHandlers(el) {
+      let dragRow = null;
+      let startY = 0;
+      let rowBounds = []; // [{ id, top, height }], captured at drag start
+      let targetIndex = null;
+
+      function onMove(e) {
+        if (!dragRow) return;
+        const delta = e.clientY - startY;
+        dragRow.style.transform = `translateY(${delta}px)`;
+
+        const draggedBounds = rowBounds.find((b) => b.id === dragRow.dataset.id);
+        const draggedCenter = draggedBounds.top + draggedBounds.height / 2 + delta;
+
+        targetIndex = rowBounds.length - 1;
+        for (let i = 0; i < rowBounds.length; i++) {
+          if (draggedCenter < rowBounds[i].top + rowBounds[i].height / 2) { targetIndex = i; break; }
+        }
+
+        el.querySelectorAll('.roster-emp-row').forEach((r) => r.classList.remove('drag-over'));
+        const targetId = rowBounds[targetIndex].id;
+        if (targetId !== dragRow.dataset.id) {
+          const targetRow = el.querySelector(`.roster-emp-row[data-id="${targetId}"]`);
+          if (targetRow) targetRow.classList.add('drag-over');
+        }
+      }
+
+      function onUp(e) {
+        if (!dragRow) return;
+        try { dragRow.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
+        dragRow.removeEventListener('pointermove', onMove);
+        dragRow.removeEventListener('pointerup', onUp);
+        dragRow.removeEventListener('pointercancel', onUp);
+
+        dragRow.classList.remove('dragging');
+        dragRow.style.transform = '';
+        el.querySelectorAll('.roster-emp-row').forEach((r) => r.classList.remove('drag-over'));
+
+        const draggedId = dragRow.dataset.id;
+        const fromIndex = rosterEmployees.findIndex((emp) => emp.id === draggedId);
+        let toIndex = targetIndex;
+        if (toIndex !== null && toIndex > fromIndex) toIndex--; // removing the dragged item first shifts later indices down by one
+
+        if (fromIndex !== -1 && toIndex !== null && toIndex !== fromIndex) {
+          const [moved] = rosterEmployees.splice(fromIndex, 1);
+          rosterEmployees.splice(toIndex, 0, moved);
+          saveEmployeesToStorage();
+          // rosterEmployees' order IS the grid's row order (renderGrid
+          // iterates it directly), so re-rendering the grid here is
+          // what makes the reorder show up in the roster table too.
+          renderGrid();
+        }
+        renderEmployeesList(); // always re-render to reset styles/listeners cleanly
+
+        dragRow = null;
+      }
+
+      el.querySelectorAll('.roster-emp-row__handle').forEach((handle) => {
+        handle.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          const row = handle.closest('.roster-emp-row');
+          dragRow = row;
+          startY = e.clientY;
+          targetIndex = rosterEmployees.findIndex((emp) => emp.id === row.dataset.id);
+
+          rowBounds = Array.from(el.querySelectorAll('.roster-emp-row')).map((r) => {
+            const rect = r.getBoundingClientRect();
+            return { id: r.dataset.id, top: rect.top, height: rect.height };
+          });
+
+          row.classList.add('dragging');
+          row.setPointerCapture(e.pointerId);
+          row.addEventListener('pointermove', onMove);
+          row.addEventListener('pointerup', onUp);
+          row.addEventListener('pointercancel', onUp);
         });
       });
     }
@@ -467,6 +656,7 @@ FarmSmart.registerTile({
       }
 
       closeEmployeeForm();
+      saveEmployeesToStorage();
       renderEmployeesList();
       renderGrid();
       showToast('Employee saved');
@@ -503,6 +693,7 @@ FarmSmart.registerTile({
           const cfg = ROSTER_FARM_CONFIG[farm];
           cfg[key] = Math.max(0, Math.min(15, cfg[key] + parseInt(dir, 10)));
           document.getElementById(`rosterStaffing-${farm}-${key}`).textContent = cfg[key];
+          saveStaffingToStorage();
         });
       });
     }
@@ -530,12 +721,14 @@ FarmSmart.registerTile({
 
     document.getElementById('rosterGenerateBtn').addEventListener('click', () => {
       generateRoster();
+      saveGridToStorage();
       renderGrid();
       showToast('Roster generated');
     });
     document.getElementById('rosterClearBtn').addEventListener('click', () => {
       openConfirm('Clear roster?', 'This clears every cell in this week\'s roster.', 'Clear', () => {
         rosterEmployees.forEach((e) => { rosterGrid[e.id] = Array(7).fill(null); });
+        saveGridToStorage();
         renderGrid();
         showToast('Roster cleared');
       });

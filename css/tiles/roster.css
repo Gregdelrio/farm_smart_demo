@@ -79,13 +79,38 @@
 }
 .roster-option-swatch { width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0; }
 .roster-option-swatch.off { background: var(--bg-card-alt); border: 1px dashed var(--text-faint); }
+.roster-option-swatch.clear {
+  background: var(--color-red-bg); color: var(--color-red);
+  display: flex; align-items: center; justify-content: center;
+}
+.roster-option-swatch.clear svg { width: 11px; height: 11px; }
 
 /* ---- Manage Employees sheet ---- */
 .roster-emp-row {
   display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
   background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 14px;
   padding: 1rem 1.1rem; margin-bottom: 0.75rem;
+  border-top: 2px solid transparent; /* keeps row height stable when .drag-over adds a visible top border */
 }
+/* The row currently being dragged: lifted slightly above the rest,
+   follows the pointer via a translateY set in JS (not here). */
+.roster-emp-row.dragging {
+  position: relative; z-index: 20;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+  background: var(--bg-card-alt);
+}
+/* The row the dragged item is currently hovering over — a top border
+   previews where it will land if released now. */
+.roster-emp-row.drag-over { border-top-color: var(--accent-yellow); }
+
+.roster-emp-row__handle {
+  width: 1.75rem; height: 1.75rem; border-radius: 8px; border: none; cursor: grab;
+  background: var(--bg-card-alt); color: var(--text-muted); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  touch-action: none; /* stops the page from scrolling while dragging on a touchscreen */
+}
+.roster-emp-row__handle svg { width: 1.1rem; height: 1.1rem; }
+.roster-emp-row.dragging .roster-emp-row__handle { cursor: grabbing; }
 .roster-emp-row__info { display: flex; flex-direction: column; gap: 0.25rem; text-align: left; flex: 1; min-width: 0; }
 .roster-emp-row__name { font-weight: 800; font-size: 1rem; }
 .roster-emp-row__meta { font-size: 0.78rem; color: var(--text-muted); }
@@ -128,3 +153,19 @@
   display: flex; align-items: center; justify-content: center;
 }
 .roster-stepper__value { font-size: 1.1rem; font-weight: 800; min-width: 1.5rem; }
+
+/* ---- Live staffing check (visible to everyone, informational) ---- */
+.roster-staffing-check {
+  margin: 0 1.5rem 1.5rem;
+  border-radius: 16px;
+  padding: 1rem 1.1rem;
+  font-size: 0.85rem;
+}
+.roster-staffing-check.ok { background: var(--color-green-bg); color: var(--color-green); }
+.roster-staffing-check.issues { background: var(--color-red-bg); color: var(--color-red); }
+.roster-staffing-check__title { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; }
+.roster-staffing-check__title i { font-size: 1.1rem; }
+.roster-staffing-check.issues .roster-staffing-check__title { margin-bottom: 0.5rem; }
+.roster-staffing-check__list { list-style: none; padding: 0; margin: 0; font-weight: 600; }
+.roster-staffing-check__list li { padding: 0.2rem 0; }
+.roster-staffing-check.neutral { background: var(--bg-card-alt); color: var(--text-secondary); }
