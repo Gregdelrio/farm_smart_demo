@@ -237,7 +237,7 @@ FarmSmart.randomSyncLabel = function () {
    ---------------------------------------------------------------------
    Sends a push notification to your phone every time someone opens the
    app, and a second one summarizing what they clicked when they leave.
-   Also used directly by the "Share the demo" button (see index.html).
+   Also used directly by the "Share the app" button (see index.html).
 
    SETUP — do this once:
      1. Install the ntfy app: https://ntfy.sh/ (App Store / Play Store).
@@ -353,19 +353,16 @@ document.addEventListener('visibilitychange', () => {
 
 document.addEventListener('DOMContentLoaded', notifyAppOpened);
 
-// ---- "Share the demo" button ----
+// ---- "Share the app" button ----
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('shareDemoBtn').addEventListener('click', async () => {
-    // Notified immediately on tap (not batched into the session-end
-    // summary) — the person asked to know right away when this
-    // specific button is used, regardless of what the person does in
-    // the share sheet afterwards (send it, or cancel).
-    const v = FarmSmart.visitorInfo;
-    sendNtfy(`IP: ${v.ip} · ${v.location}\nDevice: ${v.device}\nTime: ${new Date().toLocaleString()}`, {
-      title: '📤 Someone tapped "Share the demo"',
-      tags: 'loudspeaker',
-    });
-
+  document.getElementById('shareAppBtn').addEventListener('click', async () => {
+    // IMPORTANT: navigator.share() must run FIRST, with nothing async
+    // before it — some mobile browsers require a share() call to
+    // happen as a direct, immediate result of the tap. Even a
+    // non-awaited fetch() call (like the ntfy notification below)
+    // running beforehand can be enough to lose that "user activation"
+    // context on some Android browsers, silently making share() fail
+    // or do nothing. So: share/copy first, notify after.
     const shareData = {
       title: 'FarmSmart',
       text: 'Check out FarmSmart — our farm dashboard app.',
@@ -388,6 +385,16 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       showToast('Sharing not supported on this browser');
     }
+
+    // Notified after the share attempt (not batched into the
+    // session-end summary) — the person asked to know right away when
+    // this specific button is used, regardless of what happens in the
+    // share sheet (sent, or cancelled).
+    const v = FarmSmart.visitorInfo;
+    sendNtfy(`IP: ${v.ip} · ${v.location}\nDevice: ${v.device}\nTime: ${new Date().toLocaleString()}`, {
+      title: '📤 Someone tapped "Share the app"',
+      tags: 'loudspeaker',
+    });
   });
 });
 

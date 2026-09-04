@@ -24,3 +24,15 @@
 .vat-status-row span { font-size: 4.5cqw; font-weight: 800; }
 
 .vat-meta { text-align: center; font-size: 3.3cqw; color: var(--text-muted); font-weight: 600; margin-top: 1.5vh; }
+
+/* ---- 24h trend chart (inline SVG) — theme-aware colors ----
+   The chart's grid lines / axis labels use these classes (instead of
+   hardcoded white-based rgba values) so they stay legible in both
+   dark and light mode, since the CSS variables they reference already
+   flip correctly between themes. The temperature line itself
+   (green/red) is set directly in JS and doesn't need this — those are
+   fixed status colors, not text-on-background, and read fine on
+   either theme already. */
+.vat-chart-grid { stroke: var(--border-divider); stroke-width: 1; }
+.vat-chart-label { fill: var(--text-faint); }
+.vat-chart-limit-line { stroke: var(--color-red); opacity: 0.55; }

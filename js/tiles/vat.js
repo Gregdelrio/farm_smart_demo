@@ -51,12 +51,12 @@ FarmSmart.registerTile({
       </div>
 
       <div class="stat-row" style="display:flex;gap:1rem;margin: 0 1.5rem 1.25rem;">
-        <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:16px;padding:1.5rem 0.5rem;text-align:center;">
-          <p style="font-size:0.85rem;color:rgba(255,255,255,0.5);font-weight:600;margin:0 0 0.5vh;">Min 24h</p>
+        <div style="flex:1;background:var(--bg-card);border-radius:16px;padding:1.5rem 0.5rem;text-align:center;">
+          <p style="font-size:0.85rem;color:var(--text-muted);font-weight:600;margin:0 0 0.5vh;">Min 24h</p>
           <p style="font-size:1.6rem;font-weight:800;margin:0;" id="minVal">2.9°</p>
         </div>
-        <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:16px;padding:1.5rem 0.5rem;text-align:center;">
-          <p style="font-size:0.85rem;color:rgba(255,255,255,0.5);font-weight:600;margin:0 0 0.5vh;">Max 24h</p>
+        <div style="flex:1;background:var(--bg-card);border-radius:16px;padding:1.5rem 0.5rem;text-align:center;">
+          <p style="font-size:0.85rem;color:var(--text-muted);font-weight:600;margin:0 0 0.5vh;">Max 24h</p>
           <p style="font-size:1.6rem;font-weight:800;margin:0;" id="maxVal">4.1°</p>
         </div>
       </div>
@@ -83,8 +83,8 @@ FarmSmart.registerTile({
     // Demo data for the last 24 hours (index 0 = 24h ago, index 23 =
     // right now). Swap for a real sensor feed in production —
     // buildTrendChart() just needs an array of 24 numbers.
-    const NORMAL_READINGS = [3.6, 3.7, 3.5, 3.8, 3.9, 3.7, 3.6, 3.8, 4.0, 3.9, 3.7, 3.6, 3.8, 3.9, 4.0, 3.8, 3.7, 3.6, 3.8, 3.9, 3.7, 3.8, 3.9, 3.8];
-    const ALERT_READINGS  = [3.6, 3.7, 3.5, 3.8, 3.9, 3.7, 3.6, 3.8, 4.0, 3.9, 3.7, 3.6, 3.8, 3.9, 4.0, 3.8, 3.7, 3.6, 3.8, 4.5, 5.8, 7.0, 7.8, 8.2];
+    const NORMAL_READINGS = [3.4, 4.1, 3.3, 4.4, 3.6, 2.9, 4.2, 3.5, 4.6, 3.2, 3.9, 4.3, 2.8, 3.7, 4.5, 3.3, 4.0, 3.1, 4.4, 3.6, 2.9, 4.1, 3.5, 3.8];
+    const ALERT_READINGS  = [3.4, 4.1, 3.3, 4.4, 3.6, 2.9, 4.2, 3.5, 4.6, 3.2, 3.9, 4.3, 2.8, 3.7, 4.5, 3.3, 4.0, 3.1, 4.4, 4.8, 5.9, 7.1, 7.7, 8.2];
 
     function buildTrendChart(data) {
       const svg = document.getElementById('trendChart');
@@ -101,19 +101,19 @@ FarmSmart.registerTile({
 
       yTicks.forEach((t) => {
         const y = yFor(t);
-        svgParts.push(`<line x1="${left}" y1="${y}" x2="${width - right}" y2="${y}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`);
-        svgParts.push(`<text x="${left - 6}" y="${y + 3}" font-size="9" fill="rgba(255,255,255,0.45)" text-anchor="end">${t}°</text>`);
+        svgParts.push(`<line x1="${left}" y1="${y}" x2="${width - right}" y2="${y}" class="vat-chart-grid"/>`);
+        svgParts.push(`<text x="${left - 6}" y="${y + 3}" font-size="9" class="vat-chart-label" text-anchor="end">${t}°</text>`);
       });
 
       const limitY = yFor(6);
-      svgParts.push(`<line x1="${left}" y1="${limitY}" x2="${width - right}" y2="${limitY}" stroke="rgba(255,155,138,0.5)" stroke-width="1.5" stroke-dasharray="4,4"/>`);
+      svgParts.push(`<line x1="${left}" y1="${limitY}" x2="${width - right}" y2="${limitY}" class="vat-chart-limit-line" stroke-width="1.5" stroke-dasharray="4,4"/>`);
 
       const now = new Date();
       [0, 6, 12, 18, 23].forEach((i) => {
         const hoursAgo = (data.length - 1) - i;
         const labelTime = new Date(now.getTime() - hoursAgo * 3600 * 1000);
         const label = labelTime.toLocaleTimeString('en-US', { hour: 'numeric' });
-        svgParts.push(`<text x="${xFor(i)}" y="${height - 6}" font-size="9" fill="rgba(255,255,255,0.45)" text-anchor="middle">${label}</text>`);
+        svgParts.push(`<text x="${xFor(i)}" y="${height - 6}" font-size="9" class="vat-chart-label" text-anchor="middle">${label}</text>`);
       });
 
       const points = data.map((temp, i) => `${xFor(i)},${yFor(temp)}`).join(' ');
