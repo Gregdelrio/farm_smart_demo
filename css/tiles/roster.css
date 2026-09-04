@@ -93,12 +93,13 @@
 }
 .roster-emp-row__reorder { display: flex; flex-direction: column; gap: 0.15rem; flex-shrink: 0; }
 .roster-emp-row__move {
-  width: 1.6rem; height: 1.4rem; border-radius: 6px; border: none; cursor: pointer;
-  background: var(--bg-card-alt); color: var(--text-secondary);
+  width: 1.5rem; height: 1.3rem; border-radius: 6px; border: none; cursor: pointer;
+  background: transparent; color: var(--text-muted);
   display: flex; align-items: center; justify-content: center;
 }
-.roster-emp-row__move svg { width: 0.85rem; height: 0.85rem; }
-.roster-emp-row__move:disabled { opacity: 0.25; cursor: default; }
+.roster-emp-row__move:active { background: var(--bg-card-alt); }
+.roster-emp-row__move svg { width: 0.8rem; height: 0.8rem; }
+.roster-emp-row__move:disabled { opacity: 0.2; cursor: default; }
 .roster-emp-row__info { display: flex; flex-direction: column; gap: 0.25rem; text-align: left; flex: 1; min-width: 0; }
 .roster-emp-row__name { font-weight: 800; font-size: 1rem; }
 .roster-emp-row__meta { font-size: 0.78rem; color: var(--text-muted); }

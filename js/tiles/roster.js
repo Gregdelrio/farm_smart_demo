@@ -475,15 +475,20 @@ FarmSmart.registerTile({
     // ---- Manage Employees sheet ----
     function renderEmployeesList() {
       const el = document.getElementById('rosterEmployeesList');
-      el.innerHTML = rosterEmployees.map((emp) => {
+      el.innerHTML = rosterEmployees.map((emp, i) => {
         const farmsLabel = emp.trainedFarms.map(farmName).join(', ') || 'No farms trained';
         const partner = emp.partnerId ? rosterEmployees.find((e) => e.id === emp.partnerId) : null;
         const meta = partner ? `${farmsLabel} · Couple with ${partner.name}` : farmsLabel;
         return `
           <div class="roster-emp-row" data-id="${emp.id}">
-            <button class="roster-emp-row__handle" aria-label="Drag to reorder" type="button">
-              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
-            </button>
+            <div class="roster-emp-row__reorder">
+              <button class="roster-emp-row__move" data-id="${emp.id}" data-dir="-1" aria-label="Move up" ${i === 0 ? 'disabled' : ''}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+              </button>
+              <button class="roster-emp-row__move" data-id="${emp.id}" data-dir="1" aria-label="Move down" ${i === rosterEmployees.length - 1 ? 'disabled' : ''}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+            </div>
             <div class="roster-emp-row__info">
               <span class="roster-emp-row__name">${emp.name}</span>
               <span class="roster-emp-row__meta">${meta}</span>
@@ -494,6 +499,26 @@ FarmSmart.registerTile({
             </div>
           </div>`;
       }).join('');
+
+      // Reordering directly changes rosterEmployees' array order, which
+      // is also the order the main grid's rows render in — so moving
+      // someone here immediately reorders the table too. Plain
+      // button taps, not a drag gesture: this is the reliable option
+      // that works the same way on every phone, no touch-gesture
+      // quirks to fight with.
+      el.querySelectorAll('.roster-emp-row__move').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.id;
+          const dir = parseInt(btn.dataset.dir, 10);
+          const index = rosterEmployees.findIndex((e) => e.id === id);
+          const swapWith = index + dir;
+          if (swapWith < 0 || swapWith >= rosterEmployees.length) return;
+          [rosterEmployees[index], rosterEmployees[swapWith]] = [rosterEmployees[swapWith], rosterEmployees[index]];
+          saveEmployeesToStorage();
+          renderEmployeesList();
+          renderGrid();
+        });
+      });
 
       el.querySelectorAll('.roster-emp-row__edit').forEach((btn) => {
         btn.addEventListener('click', () => openEmployeeForm(btn.dataset.id));
@@ -508,98 +533,6 @@ FarmSmart.registerTile({
           saveGridToStorage();
           renderEmployeesList();
           renderGrid();
-        });
-      });
-
-      attachDragHandlers(el);
-    }
-
-    // ---- Drag-to-reorder ----
-    // Works with mouse AND touch via the Pointer Events API (one set
-    // of listeners covers both). Only the dragged row moves visually
-    // (a simple translateY, following the pointer) — the other rows'
-    // positions are captured ONCE at drag-start and never re-measured
-    // mid-drag, which keeps the math simple and reliable. The row
-    // currently under the dragged item gets a highlighted top border
-    // as a drop-target preview; the actual array reorder (and the
-    // matching update to the roster grid's row order, since
-    // renderGrid() iterates rosterEmployees in this same order) only
-    // happens once, on release.
-    function attachDragHandlers(el) {
-      let dragRow = null;
-      let startY = 0;
-      let rowBounds = []; // [{ id, top, height }], captured at drag start
-      let targetIndex = null;
-
-      function onMove(e) {
-        if (!dragRow) return;
-        const delta = e.clientY - startY;
-        dragRow.style.transform = `translateY(${delta}px)`;
-
-        const draggedBounds = rowBounds.find((b) => b.id === dragRow.dataset.id);
-        const draggedCenter = draggedBounds.top + draggedBounds.height / 2 + delta;
-
-        targetIndex = rowBounds.length - 1;
-        for (let i = 0; i < rowBounds.length; i++) {
-          if (draggedCenter < rowBounds[i].top + rowBounds[i].height / 2) { targetIndex = i; break; }
-        }
-
-        el.querySelectorAll('.roster-emp-row').forEach((r) => r.classList.remove('drag-over'));
-        const targetId = rowBounds[targetIndex].id;
-        if (targetId !== dragRow.dataset.id) {
-          const targetRow = el.querySelector(`.roster-emp-row[data-id="${targetId}"]`);
-          if (targetRow) targetRow.classList.add('drag-over');
-        }
-      }
-
-      function onUp(e) {
-        if (!dragRow) return;
-        try { dragRow.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
-        dragRow.removeEventListener('pointermove', onMove);
-        dragRow.removeEventListener('pointerup', onUp);
-        dragRow.removeEventListener('pointercancel', onUp);
-
-        dragRow.classList.remove('dragging');
-        dragRow.style.transform = '';
-        el.querySelectorAll('.roster-emp-row').forEach((r) => r.classList.remove('drag-over'));
-
-        const draggedId = dragRow.dataset.id;
-        const fromIndex = rosterEmployees.findIndex((emp) => emp.id === draggedId);
-        let toIndex = targetIndex;
-        if (toIndex !== null && toIndex > fromIndex) toIndex--; // removing the dragged item first shifts later indices down by one
-
-        if (fromIndex !== -1 && toIndex !== null && toIndex !== fromIndex) {
-          const [moved] = rosterEmployees.splice(fromIndex, 1);
-          rosterEmployees.splice(toIndex, 0, moved);
-          saveEmployeesToStorage();
-          // rosterEmployees' order IS the grid's row order (renderGrid
-          // iterates it directly), so re-rendering the grid here is
-          // what makes the reorder show up in the roster table too.
-          renderGrid();
-        }
-        renderEmployeesList(); // always re-render to reset styles/listeners cleanly
-
-        dragRow = null;
-      }
-
-      el.querySelectorAll('.roster-emp-row__handle').forEach((handle) => {
-        handle.addEventListener('pointerdown', (e) => {
-          e.preventDefault();
-          const row = handle.closest('.roster-emp-row');
-          dragRow = row;
-          startY = e.clientY;
-          targetIndex = rosterEmployees.findIndex((emp) => emp.id === row.dataset.id);
-
-          rowBounds = Array.from(el.querySelectorAll('.roster-emp-row')).map((r) => {
-            const rect = r.getBoundingClientRect();
-            return { id: r.dataset.id, top: rect.top, height: rect.height };
-          });
-
-          row.classList.add('dragging');
-          row.setPointerCapture(e.pointerId);
-          row.addEventListener('pointermove', onMove);
-          row.addEventListener('pointerup', onUp);
-          row.addEventListener('pointercancel', onUp);
         });
       });
     }
