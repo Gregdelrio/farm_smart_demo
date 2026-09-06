@@ -24,6 +24,11 @@
 .ms-stat .stat-value { font-size: 4.2cqw; font-weight: 800; margin: 0; }
 .ms-stat .stat-value small { font-size: 2.8cqw; font-weight: 600; color: var(--text-muted); }
 
+/* Minimal card view: just BMCC + TBC, no borders needed since there's
+   nothing above/below them to separate from within the card. */
+.ms-stat-grid--card { border: none; padding: 0; margin-bottom: 2.5vh; }
+.ms-stat-grid--card .ms-stat .stat-value { font-size: 5.5cqw; }
+
 /* Milk solids (kg MS) is the headline figure — it's what farm income
    is actually calculated from — so it gets its own highlighted row
    rather than sitting in the small stat grid above. */
@@ -44,3 +49,20 @@
 .ms-payment-card { text-align: center; }
 .ms-payment-card .stat-label { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 .ms-payment-value { font-size: 2.6rem; font-weight: 800; color: var(--color-green); margin: 0.4rem 0; }
+
+/* ---- Trends list (shared by card + overlay) ---- */
+.ms-trend-row { display: flex; align-items: center; justify-content: space-between; padding: 1vh 0; border-bottom: 1px solid var(--border-divider); }
+.ms-trend-row:last-child { border-bottom: none; }
+.ms-trend-row__label { font-size: 3.4cqw; font-weight: 700; color: var(--text-secondary); }
+.ms-trend-row__cells { display: flex; gap: 2.5cqw; font-size: 3.2cqw; font-weight: 700; }
+
+/* BMCC/TBC matter most for quality grading, so they get a highlighted
+   chip-style row instead of blending into the plain list — bigger
+   label, bigger numbers, a subtle background so the eye lands there
+   first. */
+.ms-trend-row--emphasize {
+  background: rgba(139,95,191,0.08); border: 1px solid rgba(139,95,191,0.25);
+  border-radius: 12px; padding: 1.2vh 3cqw; margin-bottom: 1vh; border-bottom: none;
+}
+.ms-trend-row--emphasize .ms-trend-row__label { font-size: 4cqw; font-weight: 800; color: var(--text-primary); }
+.ms-trend-row__cells--emphasize { font-size: 3.8cqw; font-weight: 800; gap: 3cqw; }

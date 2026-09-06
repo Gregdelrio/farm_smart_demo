@@ -30,9 +30,9 @@
 // (yellow=action, green=ok, red=alert, blue=info) so a farm color in
 // this grid is never confused with a status elsewhere in the app. ----
 const ROSTER_FARM_CONFIG = {
-  laang:    { color: '#2A9D8F', min: 1, ideal: 1, max: 2 }, // teal
-  maguires: { color: '#E8792E', min: 1, ideal: 2, max: 3 }, // orange
+  laang:    { color: '#2A9D8F', min: 1, ideal: 1, max: 1, exemptFromMinimumGuarantee: true }, // teal — Carolina is solo here
   vickers:  { color: '#8B5FBF', min: 2, ideal: 2, max: 3 }, // purple
+  maguires: { color: '#E8792E', min: 1, ideal: 2, max: 2 }, // orange
 };
 
 const WEEKLY_DAYS_OFF = 2; // fixed for every employee, per week
@@ -49,12 +49,12 @@ const ROSTER_DELETE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="cur
 // tries (best-effort, not a hard rule) to put them on the same farm
 // on days they both work.
 let rosterEmployees = [
-  { id: 'greg',      name: 'Greg',       trainedFarms: ['maguires'],            partnerId: 'violette' },
+  { id: 'greg',      name: 'Greg',       trainedFarms: ['vickers'], partnerId: 'violette', consecutiveOffTarget: 2, companionTarget: 2 },
   { id: 'violette',  name: 'Violette',   trainedFarms: ['maguires'],            partnerId: 'greg' },
-  { id: 'bart',      name: 'Bart',       trainedFarms: ['maguires', 'vickers'], partnerId: null },
-  { id: 'elsep',     name: 'Else P',     trainedFarms: ['vickers', 'laang'],    partnerId: null },
-  { id: 'lucia',     name: 'Lucia',      trainedFarms: ['maguires', 'vickers'], partnerId: null },
-  { id: 'carolinas', name: 'Carolina S', trainedFarms: ['laang'],               partnerId: null },
+  { id: 'lucia',     name: 'Lucia',      trainedFarms: ['vickers'],             partnerId: 'bart' },
+  { id: 'bart',      name: 'Bart',       trainedFarms: ['vickers', 'maguires'], partnerId: 'lucia' },
+  { id: 'elsep',     name: 'Else',       trainedFarms: ['vickers'],             partnerId: null },
+  { id: 'carolinas', name: 'Carolina',   trainedFarms: ['laang'],               partnerId: null },
 ];
 
 // rosterGrid[employeeId][dayIndex] = null (blank) | 'off' | a farm id
@@ -78,13 +78,27 @@ rosterEmployees.forEach((e) => ensureGridRow(e.id));
 const ROSTER_EMPLOYEES_STORAGE_KEY = 'farmsmart-roster-employees';
 const ROSTER_STAFFING_STORAGE_KEY = 'farmsmart-roster-staffing';
 
+// Bump this whenever the baseline `rosterEmployees` array above changes
+// in a way that should override what's already saved on a device
+// (reordering, renaming, adding/removing people) — otherwise a device
+// that already saved the OLD array would keep shadowing every such
+// update forever, since loadEmployeesFromStorage below always prefers
+// whatever's saved. Editable in-app changes (Manage Employees) still
+// persist normally between versions that don't bump this number.
+const ROSTER_EMPLOYEES_SCHEMA_VERSION = 2;
+const ROSTER_EMPLOYEES_VERSION_KEY = 'farmsmart-roster-employees-version';
+
 function saveEmployeesToStorage() {
   try {
     localStorage.setItem(ROSTER_EMPLOYEES_STORAGE_KEY, JSON.stringify(rosterEmployees));
+    localStorage.setItem(ROSTER_EMPLOYEES_VERSION_KEY, String(ROSTER_EMPLOYEES_SCHEMA_VERSION));
   } catch (e) { /* storage unavailable — edits still work this session */ }
 }
 function loadEmployeesFromStorage() {
   try {
+    const savedVersion = parseInt(localStorage.getItem(ROSTER_EMPLOYEES_VERSION_KEY) || '0', 10);
+    if (savedVersion < ROSTER_EMPLOYEES_SCHEMA_VERSION) return; // stale baseline — keep the fresh defaults above
+
     const raw = localStorage.getItem(ROSTER_EMPLOYEES_STORAGE_KEY);
     if (!raw) return;
     const saved = JSON.parse(raw);
@@ -210,68 +224,223 @@ function shuffle(arr) {
    produce a sensible starting roster that a human then fine-tunes by
    hand, which is the actual intended workflow.
 --------------------------------------------------------------------- */
+
 function generateRoster() {
-  const farmIds = Object.keys(ROSTER_FARM_CONFIG);
+  // ======================================================================
+  // Built around exactly these 3 rules:
+  //   1. Every employee gets exactly WEEKLY_DAYS_OFF (2) days off/week.
+  //   2. Each couple (anyone with a partnerId) shares at least 1 of
+  //      those days off. A couple can additionally be flagged with
+  //      `consecutiveOffTarget: N` on either member (see Greg below)
+  //      to require N CONSECUTIVE shared days instead of just 1.
+  //   3. Every farm's MINIMUM is respected every day — EXCEPT any farm
+  //      flagged `exemptFromMinimumGuarantee: true` in
+  //      ROSTER_FARM_CONFIG (Laang, since Carolina is solo there and
+  //      her mandatory days off are expected to leave it uncovered
+  //      sometimes).
+  //
+  // DATA-DRIVEN, not hardcoded by name: farm assignment (step 2) reads
+  // each employee's live `trainedFarms` and each farm's live
+  // `ROSTER_FARM_CONFIG` (min/ideal/max) — so editing an employee's
+  // trained farms, changing Farm Staffing numbers, or adding a
+  // brand-new employee in "Manage Employees" all take effect on the
+  // next Generate, with no code change needed. The one named exception
+  // is Greg's `consecutiveOffTarget: 2` flag on his employee record —
+  // that's a deliberate business choice for that specific couple, not
+  // a limitation; a future couple could get the same treatment by
+  // adding the same field to their record.
+  //
+  // Only cells still blank (null) are ever touched — anything already
+  // set by hand (tap a cell before generating) is left alone.
+  // ======================================================================
+
+  // ---- Step 1: off-days (rules 1 + 2) ----
+  // Off-days are LOAD-BALANCED across the week (picking whichever
+  // valid day currently has the fewest people off, not a pure random
+  // day) rather than pure random — this is what keeps too many people
+  // from accidentally landing off on the same day, which is what was
+  // forcing the safety net below to fire constantly and break rules 1
+  // and 2 in the process.
+  function offCountForDay(d) {
+    return rosterEmployees.filter((e2) => rosterGrid[e2.id][d] === 'off').length;
+  }
+  function pickLeastLoadedDay(candidateDays) {
+    let minLoad = Infinity;
+    candidateDays.forEach((d) => { minLoad = Math.min(minLoad, offCountForDay(d)); });
+    return shuffle(candidateDays.filter((d) => offCountForDay(d) === minLoad))[0];
+  }
+
+  // Finds the best N-day CONSECUTIVE window that's still blank for
+  // BOTH members of a group. Only used for couples with a
+  // consecutiveOffTarget (see below).
+  function pickLeastLoadedConsecutiveBlock(group, length) {
+    let bestLoad = Infinity;
+    let bestStarts = [];
+    for (let start = 0; start <= 7 - length; start++) {
+      const days = Array.from({ length }, (_, i) => start + i);
+      const allBlank = days.every((d) => group.every((g) => rosterGrid[g.id][d] === null));
+      if (!allBlank) continue;
+      const load = days.reduce((sum, d) => sum + offCountForDay(d), 0);
+      if (load < bestLoad) { bestLoad = load; bestStarts = [start]; }
+      else if (load === bestLoad) { bestStarts.push(start); }
+    }
+    if (bestStarts.length === 0) return null;
+    const start = shuffle(bestStarts)[0];
+    return Array.from({ length }, (_, i) => start + i);
+  }
+
   const processed = new Set();
 
-  // ---- Pass 1: off-days, couples handled jointly ----
-  rosterEmployees.forEach((emp) => {
-    if (processed.has(emp.id)) return;
-    const partner = emp.partnerId ? rosterEmployees.find((e) => e.id === emp.partnerId) : null;
-    const group = partner ? [emp, partner] : [emp];
-    group.forEach((e) => processed.add(e.id));
+  rosterEmployees.forEach((e) => {
+    if (processed.has(e.id)) return;
+    const partner = e.partnerId ? rosterEmployees.find((p) => p.id === e.partnerId) : null;
+    const group = partner ? [e, partner] : [e];
+    group.forEach((g) => processed.add(g.id));
 
-    const alreadyOff = new Set();
-    group.forEach((e) => rosterGrid[e.id].forEach((v, i) => { if (v === 'off') alreadyOff.add(i); }));
+    if (group.length > 1) {
+      const consecutiveTarget = Math.max(0, ...group.map((g) => g.consecutiveOffTarget || 0));
+      const hasPreset = group.some((g) => rosterGrid[g.id].some((v) => v === 'off'));
 
-    let candidateDays = [];
-    for (let d = 0; d < 7; d++) {
-      if (alreadyOff.has(d)) continue;
-      if (group.every((e) => rosterGrid[e.id][d] === null)) candidateDays.push(d);
+      if (consecutiveTarget > 1 && !hasPreset) {
+        // e.g. Greg+Violette: fully synced N-consecutive-day block,
+        // auto-picked fresh — only when NEITHER has any preset yet,
+        // so a manually-set day off (tapped before Generate) is never
+        // padded with extra days on top of it.
+        const block = pickLeastLoadedConsecutiveBlock(group, Math.min(consecutiveTarget, WEEKLY_DAYS_OFF));
+        if (block) block.forEach((d) => group.forEach((g) => { rosterGrid[g.id][d] = 'off'; }));
+      } else {
+        // Regular couples (or a consecutive-target couple with a
+        // preset already in place): guarantee at least 1 shared day
+        // off, but only if both members still have room in their
+        // quota, so a manual preset that already maxed someone out is
+        // never exceeded.
+        const hasSharedOff = Array.from({ length: 7 }, (_, d) => d).some((d) => group.every((g) => rosterGrid[g.id][d] === 'off'));
+        const allHaveRoom = group.every((g) => rosterGrid[g.id].filter((v) => v === 'off').length < WEEKLY_DAYS_OFF);
+        if (!hasSharedOff && allHaveRoom) {
+          let candidates = [];
+          for (let d = 0; d < 7; d++) if (group.every((g) => rosterGrid[g.id][d] === null)) candidates.push(d);
+          if (candidates.length > 0) {
+            const sharedDay = pickLeastLoadedDay(candidates);
+            group.forEach((g) => { rosterGrid[g.id][sharedDay] = 'off'; });
+          }
+        }
+      }
     }
-    candidateDays = shuffle(candidateDays);
 
-    const stillNeeded = Math.max(0, WEEKLY_DAYS_OFF - alreadyOff.size);
-    candidateDays.slice(0, stillNeeded).forEach((d) => {
-      group.forEach((e) => { rosterGrid[e.id][d] = 'off'; });
+    // Every employee (solo or in a couple) fills up to their full
+    // WEEKLY_DAYS_OFF, one day at a time. Prefers a day the partner is
+    // ALREADY off on first (keeps/creates a shared day for free, no
+    // extra days needed), otherwise picks the currently-least-loaded
+    // remaining blank day.
+    group.forEach((g) => {
+      let currentOff = rosterGrid[g.id].filter((v) => v === 'off').length;
+      while (currentOff < WEEKLY_DAYS_OFF) {
+        let blanks = [];
+        for (let d = 0; d < 7; d++) if (rosterGrid[g.id][d] === null) blanks.push(d);
+        if (blanks.length === 0) break;
+        const partnerOffBlanks = g.partnerId ? blanks.filter((d) => rosterGrid[g.partnerId][d] === 'off') : [];
+        const d = partnerOffBlanks.length > 0 ? shuffle(partnerOffBlanks)[0] : pickLeastLoadedDay(blanks);
+        rosterGrid[g.id][d] = 'off';
+        currentOff++;
+      }
     });
   });
 
-  // ---- Pass 2: farm assignments, day by day ----
+  // ---- Step 2: farm assignments (rule 3), driven by live trainedFarms
+  // and ROSTER_FARM_CONFIG — not hardcoded by employee name. ----
+  const guaranteedFarms = Object.keys(ROSTER_FARM_CONFIG).filter((f) => !ROSTER_FARM_CONFIG[f].exemptFromMinimumGuarantee);
+
   for (let d = 0; d < 7; d++) {
-    let available = rosterEmployees.filter((e) => rosterGrid[e.id][d] === null);
-    const counts = {};
-    farmIds.forEach((f) => {
-      counts[f] = rosterEmployees.filter((e) => rosterGrid[e.id][d] === f).length;
-    });
+    const working = (id) => rosterGrid[id][d] === null; // still undecided today (not a day off)
+    const farmCount = (farmId) => rosterEmployees.filter((e) => rosterGrid[e.id][d] === farmId).length;
 
-    // Fill each farm toward its ideal headcount, biggest shortfall first.
-    const order = farmIds.slice().sort((a, b) => (ROSTER_FARM_CONFIG[b].ideal - counts[b]) - (ROSTER_FARM_CONFIG[a].ideal - counts[a]));
-
-    order.forEach((farmId) => {
-      const cfg = ROSTER_FARM_CONFIG[farmId];
-      while (counts[farmId] < cfg.ideal) {
-        let candidates = available.filter((e) => e.trainedFarms.includes(farmId));
-        if (candidates.length === 0) break;
-        // Prefer someone whose partner already landed on this farm today.
-        candidates.sort((a, b) => {
-          const aWithPartner = a.partnerId && rosterGrid[a.partnerId][d] === farmId ? 1 : 0;
-          const bWithPartner = b.partnerId && rosterGrid[b.partnerId][d] === farmId ? 1 : 0;
-          return bWithPartner - aWithPartner;
-        });
-        const chosen = candidates[0];
-        rosterGrid[chosen.id][d] = farmId;
-        counts[farmId]++;
-        available = available.filter((e) => e.id !== chosen.id);
+    // Single-skill people go straight to their one trained farm —
+    // they have no choice, so no need-scoring is involved.
+    rosterEmployees.forEach((e) => {
+      if (working(e.id) && e.trainedFarms.length === 1) {
+        rosterGrid[e.id][d] = e.trainedFarms[0];
       }
     });
 
-    // Anyone still unassigned: place under a trained farm with room
-    // left under its max, otherwise treat the day as a bonus day off.
-    available.forEach((e) => {
-      const farm = e.trainedFarms.find((f) => counts[f] < ROSTER_FARM_CONFIG[f].max);
-      if (farm) { rosterGrid[e.id][d] = farm; counts[farm]++; }
-      else { rosterGrid[e.id][d] = 'off'; }
+    // Multi-skill (cross-trained) people are assigned to whichever of
+    // their trained farms needs them most RIGHT NOW: below its
+    // minimum is always most urgent, then below its ideal, then
+    // nothing needed. This is what makes a cross-trained person (like
+    // Greg or Bart) automatically cover a farm that's short-staffed
+    // that day, without hardcoding who covers what.
+    function farmNeed(farmId) {
+      const cfg = ROSTER_FARM_CONFIG[farmId];
+      const count = farmCount(farmId);
+      if (count < cfg.min) return 1000 + (cfg.min - count); // urgent — below minimum
+      if (count < cfg.ideal) return cfg.ideal - count; // wants more, less urgent
+      return -1; // already at/above ideal — no need
+    }
+    rosterEmployees
+      .filter((e) => working(e.id) && e.trainedFarms.length > 1)
+      .forEach((e) => {
+        let bestFarm = null;
+        let bestNeed = -Infinity;
+        e.trainedFarms.forEach((f) => {
+          const need = farmNeed(f);
+          if (need > bestNeed) { bestNeed = need; bestFarm = f; }
+        });
+        if (bestFarm) rosterGrid[e.id][d] = bestFarm;
+      });
+
+    // Anyone somehow still unassigned (e.g. an employee with no
+    // trained farms at all — a data-entry edge case) gets the day off.
+    rosterEmployees.forEach((e) => {
+      if (rosterGrid[e.id][d] === null) rosterGrid[e.id][d] = 'off';
+    });
+
+    // ---- Soft "companion" preference (best-effort, never at the
+    // expense of anyone's day off or another farm's minimum) ----
+    // An employee flagged `companionTarget: N` prefers having N other
+    // people on their farm when they're working — e.g. Greg (Vickers
+    // only) prefers 2 others with him. This is purely a nice-to-have:
+    // it only pulls in someone ALREADY working elsewhere that day (a
+    // day off is never touched), and only if their current farm can
+    // still spare them without dropping below its own minimum.
+    rosterEmployees.forEach((e) => {
+      if (!e.companionTarget) return;
+      const farmId = rosterGrid[e.id][d];
+      if (!farmId || farmId === 'off') return;
+      const cfg = ROSTER_FARM_CONFIG[farmId];
+      const desiredTotal = Math.min(cfg.max, 1 + e.companionTarget);
+
+      while (farmCount(farmId) < desiredTotal) {
+        const candidates = rosterEmployees.filter((other) => {
+          if (other.id === e.id) return false;
+          const otherFarm = rosterGrid[other.id][d];
+          if (!otherFarm || otherFarm === 'off' || otherFarm === farmId) return false; // never touch a day off
+          if (!other.trainedFarms.includes(farmId)) return false;
+          return farmCount(otherFarm) - 1 >= ROSTER_FARM_CONFIG[otherFarm].min;
+        });
+        if (candidates.length === 0) break;
+        rosterGrid[candidates[0].id][d] = farmId;
+      }
+    });
+
+    // ---- Safety net (rule 3, hard guarantee) ----
+    // Every non-exempt farm must NEVER fall below its minimum, even in
+    // the rare case where everyone trained for it happened to land on
+    // a day off. Pulls someone in on their day off as a last resort,
+    // preferring to break an individual's day off before a couple's
+    // shared one.
+    guaranteedFarms.forEach((farmId) => {
+      const cfg = ROSTER_FARM_CONFIG[farmId];
+      let count = farmCount(farmId);
+      while (count < cfg.min) {
+        let candidates = rosterEmployees.filter((e) => rosterGrid[e.id][d] === 'off' && e.trainedFarms.includes(farmId));
+        if (candidates.length === 0) break; // nobody trained for this farm is even off today — truly can't be helped
+        candidates.sort((a, b) => {
+          const aBreaksShared = a.partnerId && rosterGrid[a.partnerId][d] === 'off' ? 1 : 0;
+          const bBreaksShared = b.partnerId && rosterGrid[b.partnerId][d] === 'off' ? 1 : 0;
+          return aBreaksShared - bBreaksShared;
+        });
+        rosterGrid[candidates[0].id][d] = farmId;
+        count++;
+      }
     });
   }
 }
@@ -287,8 +456,8 @@ FarmSmart.registerTile({
       <p class="roster-week-label" id="rosterWeekLabel">This week</p>
       <div class="roster-legend roster-legend--card" id="rosterLegendCard"></div>
       <div class="roster-grid-wrap roster-grid-wrap--card"><div class="roster-grid" id="rosterGridCardEl"></div></div>
-      <p class="roster-preview-hint">Tap "View Roster" to edit</p>
-      <button class="card-btn primary" id="rosterOpenBtn"><i class="ti ti-table"></i>View Roster</button>
+      <p class="roster-preview-hint">Tap "Edit Roster" to edit</p>
+      <button class="card-btn primary" id="rosterOpenBtn"><i class="ti ti-table"></i>Edit Roster</button>
     </div>
 
     <!-- ================= MAIN ROSTER OVERLAY ================= -->
@@ -302,8 +471,17 @@ FarmSmart.registerTile({
 
       <p class="roster-week-label" style="margin: 0 1.5rem 1.5rem;" id="rosterOverlayWeekLabel"></p>
 
-      <div class="roster-legend" id="rosterLegend"></div>
-      <div class="roster-grid-wrap"><div class="roster-grid" id="rosterGridEl"></div></div>
+      <!-- Legend + grid shown here for reference — "Share Roster"
+           below draws its own canvas from the same data (see
+           drawRosterCanvas() in init()), it doesn't screenshot this. -->
+      <div>
+        <div class="roster-legend" id="rosterLegend"></div>
+        <div class="roster-grid-wrap"><div class="roster-grid" id="rosterGridEl"></div></div>
+      </div>
+
+      <div style="margin: 0 1.5rem 2rem;">
+        <button class="card-btn" id="rosterShareBtn"><i class="ti ti-share"></i>Share Roster</button>
+      </div>
 
       <!-- Owner-only edit controls -->
       <div class="roster-action-row" id="rosterOwnerActions" style="margin: 0 1.5rem 2rem;">
@@ -317,7 +495,12 @@ FarmSmart.registerTile({
     <!-- ================= CELL EDIT SHEET ================= -->
     <div class="sheet-mask" id="rosterCellSheetMask">
       <div class="sheet">
-        <h2 id="rosterCellSheetTitle">Assign</h2>
+        <div class="sheet-header">
+          <button class="sheet-back-btn" id="rosterCellSheetBackBtn" aria-label="Back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </button>
+          <h2 id="rosterCellSheetTitle">Assign</h2>
+        </div>
         <div id="rosterCellOptions"></div>
       </div>
     </div>
@@ -325,7 +508,12 @@ FarmSmart.registerTile({
     <!-- ================= MANAGE EMPLOYEES SHEET ================= -->
     <div class="sheet-mask" id="rosterEmployeesSheetMask">
       <div class="sheet">
-        <h2>Manage Employees</h2>
+        <div class="sheet-header">
+          <button class="sheet-back-btn" id="rosterEmployeesSheetBackBtn" aria-label="Back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </button>
+          <h2>Manage Employees</h2>
+        </div>
         <div id="rosterEmployeesList"></div>
         <button class="card-btn primary" id="rosterAddEmployeeBtn" style="margin: 0.5rem 1.5rem 0; width: calc(100% - 3rem);"><i class="ti ti-plus"></i>Add Employee</button>
       </div>
@@ -334,7 +522,12 @@ FarmSmart.registerTile({
     <!-- ================= EMPLOYEE ADD/EDIT FORM SHEET ================= -->
     <div class="sheet-mask" id="rosterEmployeeFormSheetMask">
       <div class="sheet">
-        <h2 id="rosterEmployeeFormTitle">Add Employee</h2>
+        <div class="sheet-header">
+          <button class="sheet-back-btn" id="rosterEmployeeFormBackBtn" aria-label="Back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </button>
+          <h2 id="rosterEmployeeFormTitle">Add Employee</h2>
+        </div>
 
         <p class="roster-form-label">Name</p>
         <input type="text" class="roster-text-input" id="rosterEmployeeNameInput" placeholder="Employee name">
@@ -352,7 +545,12 @@ FarmSmart.registerTile({
     <!-- ================= FARM STAFFING SHEET ================= -->
     <div class="sheet-mask" id="rosterStaffingSheetMask">
       <div class="sheet">
-        <h2>Farm Staffing</h2>
+        <div class="sheet-header">
+          <button class="sheet-back-btn" id="rosterStaffingSheetBackBtn" aria-label="Back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </button>
+          <h2>Farm Staffing</h2>
+        </div>
         <p class="roster-week-label" style="margin: 0 1.5rem 1.5rem;">Target headcount per day, for the roster generator.</p>
         <div id="rosterStaffingList"></div>
       </div>
@@ -676,7 +874,177 @@ FarmSmart.registerTile({
     }
 
     document.getElementById('rosterOpenBtn').addEventListener('click', openRosterOverlay);
+
+    // Back arrows for the 4 sheets, plus tap-outside-the-sheet to close.
+    document.getElementById('rosterCellSheetBackBtn').addEventListener('click', closeCellSheet);
+    document.getElementById('rosterEmployeesSheetBackBtn').addEventListener('click', closeEmployeesSheet);
+    document.getElementById('rosterEmployeeFormBackBtn').addEventListener('click', closeEmployeeForm);
+    document.getElementById('rosterStaffingSheetBackBtn').addEventListener('click', closeStaffingSheet);
+    [
+      ['rosterCellSheetMask', closeCellSheet],
+      ['rosterEmployeesSheetMask', closeEmployeesSheet],
+      ['rosterEmployeeFormSheetMask', closeEmployeeForm],
+      ['rosterStaffingSheetMask', closeStaffingSheet],
+    ].forEach(([maskId, closeFn]) => {
+      document.getElementById(maskId).addEventListener('click', (e) => {
+        if (e.target.id === maskId) closeFn();
+      });
+    });
     document.getElementById('rosterBackBtn').addEventListener('click', closeRosterOverlay);
+
+    // ---- Share Roster: draws the grid + legend directly onto a
+    // <canvas> (not a DOM screenshot) and opens the device's native
+    // share sheet (WhatsApp, Messages, email...), same idea as "Share
+    // the app" in js/core.js. Drawing it by hand — rather than
+    // html2canvas-ing the on-screen grid — avoids two problems a DOM
+    // screenshot has here: the grid's own horizontal scroll clips
+    // Saturday/Sunday out of frame, and the captured box otherwise
+    // includes surrounding margin/padding as blank space. This way the
+    // image is exactly the table + legend, nothing else. Available to
+    // everyone, not just the Owner — sharing a read-only snapshot
+    // isn't an edit action. ----
+    function drawRosterCanvas() {
+      const dates = weekDates();
+      const farmIdsForLegend = Object.keys(ROSTER_FARM_CONFIG);
+      const scale = 2; // render at 2x for a crisp share image
+
+      const nameColWidth = 130;
+      const dayColWidth = 84;
+      const headerHeight = 56;
+      const rowHeight = 48;
+      const legendRowHeight = 30;
+      const padding = 20;
+
+      const gridWidth = nameColWidth + dayColWidth * 7;
+      const width = gridWidth + padding * 2;
+      const legendHeight = 20 + Math.ceil((farmIdsForLegend.length + 1) / 2) * legendRowHeight;
+      const height = padding + headerHeight + rowHeight * rosterEmployees.length + legendHeight + padding;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale);
+
+      // Background — always light, regardless of the app's current
+      // theme, so the shared image reads well in any chat app.
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      let y = padding;
+      const gridLeft = padding;
+
+      // Day headers
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '600 12px -apple-system, sans-serif';
+      dates.forEach((d, i) => {
+        const cx = gridLeft + nameColWidth + i * dayColWidth + dayColWidth / 2;
+        ctx.textAlign = 'center';
+        ctx.fillText(DOW_LABELS[i], cx, y + headerHeight / 2 - 8);
+        ctx.font = '700 13px -apple-system, sans-serif';
+        ctx.fillStyle = '#111827';
+        ctx.fillText(`${d.getDate()}/${d.getMonth() + 1}`, cx, y + headerHeight / 2 + 10);
+        ctx.font = '600 12px -apple-system, sans-serif';
+        ctx.fillStyle = '#6b7280';
+      });
+      y += headerHeight;
+
+      // Rows
+      rosterEmployees.forEach((emp, rowIdx) => {
+        if (rowIdx % 2 === 1) {
+          ctx.fillStyle = '#f9fafb';
+          ctx.fillRect(gridLeft, y, gridWidth, rowHeight);
+        }
+        ctx.fillStyle = '#111827';
+        ctx.font = '700 13px -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(emp.name, gridLeft + 12, y + rowHeight / 2);
+
+        for (let d = 0; d < 7; d++) {
+          const val = rosterGrid[emp.id][d];
+          const cx = gridLeft + nameColWidth + d * dayColWidth + dayColWidth / 2;
+          const cy = y + rowHeight / 2;
+          if (val === 'off' || !val) {
+            ctx.strokeStyle = '#d1d5db';
+            ctx.setLineDash([3, 2]);
+            ctx.strokeRect(cx - 30, cy - 10, 60, 20);
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '600 10px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Off', cx, cy);
+          } else {
+            const color = ROSTER_FARM_CONFIG[val] ? ROSTER_FARM_CONFIG[val].color : '#999';
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.roundRect(cx - 30, cy - 10, 60, 20, 6);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '700 10px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(farmInitial(val), cx, cy);
+          }
+        }
+        y += rowHeight;
+      });
+
+      // Legend
+      y += 16;
+      ctx.textAlign = 'left';
+      let lx = gridLeft;
+      let col = 0;
+      const legendEntries = farmIdsForLegend.map((f) => ({ label: farmName(f), color: ROSTER_FARM_CONFIG[f].color }))
+        .concat([{ label: 'Day off', color: null }]);
+      legendEntries.forEach((entry) => {
+        const colX = gridLeft + (col % 2) * (gridWidth / 2);
+        const rowY = y + Math.floor(col / 2) * legendRowHeight;
+        if (entry.color) {
+          ctx.fillStyle = entry.color;
+          ctx.beginPath();
+          ctx.roundRect(colX, rowY, 14, 14, 4);
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = '#9ca3af';
+          ctx.setLineDash([2, 2]);
+          ctx.strokeRect(colX, rowY, 14, 14);
+          ctx.setLineDash([]);
+        }
+        ctx.fillStyle = '#374151';
+        ctx.font = '600 12px -apple-system, sans-serif';
+        ctx.fillText(entry.label, colX + 20, rowY + 7);
+        col++;
+      });
+
+      return canvas;
+    }
+
+    document.getElementById('rosterShareBtn').addEventListener('click', async () => {
+      try {
+        const canvas = drawRosterCanvas();
+        canvas.toBlob(async (blob) => {
+          if (!blob) { showToast('Could not create the roster image'); return; }
+          const file = new File([blob], 'farmsmart-roster.png', { type: 'image/png' });
+          const shareData = { files: [file], title: 'FarmSmart Roster', text: "This week's farm roster." };
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try { await navigator.share(shareData); } catch (e) { /* person cancelled the share sheet */ }
+          } else {
+            // No file-sharing support on this browser — download the
+            // image instead so it can still be attached manually.
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'farmsmart-roster.png';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Roster image downloaded');
+          }
+        }, 'image/png');
+      } catch (e) {
+        showToast('Could not create the roster image');
+      }
+    });
 
     document.getElementById('rosterGenerateBtn').addEventListener('click', () => {
       generateRoster();

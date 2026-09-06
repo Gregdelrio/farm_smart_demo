@@ -1,0 +1,51 @@
+/* =====================================================================
+   TILE: EMPLOYEE TIMESHEET / PAYROLL
+   ---------------------------------------------------------------------
+   Only styles for markup inside this tile's card + overlay
+   (js/tiles/timesheet.js).
+   ===================================================================== */
+
+.ts-today-line {
+  font-size: 3.4cqw; color: var(--text-secondary); font-weight: 600;
+  margin: 0 0 2vh;
+}
+
+.ts-today-list {
+  display: flex; flex-direction: column; gap: 1.2vh;
+  padding: 2vh 0; border-top: 1px solid var(--border-divider); border-bottom: 1px solid var(--border-divider);
+  margin-bottom: 2.5vh;
+}
+.ts-row {
+  display: flex; align-items: center; gap: 2.5cqw; flex-wrap: wrap;
+}
+.ts-row__name { font-size: 3.6cqw; font-weight: 700; flex: 0 0 22cqw; }
+.ts-row__farm {
+  font-size: 2.8cqw; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+  padding: 0.4vh 1.8cqw; border-radius: 20px;
+  background: rgba(139,95,191,0.12); color: var(--text-secondary);
+}
+.ts-employee-summary__today { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); }
+.ts-no-past-shifts { padding: 1rem 0; font-size: 0.8rem; color: var(--text-muted); font-style: italic; }
+.ts-row__times { flex: 1; text-align: right; font-size: 2.9cqw; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.2vh; }
+
+/* ---- Payroll overlay ---- */
+.ts-award-note {
+  font-size: 0.78rem; color: var(--text-muted); line-height: 1.5;
+  margin: 0 1.5rem 1.25rem; padding: 1rem; border-radius: 12px;
+  background: var(--bg-card);
+}
+.ts-award-note strong { color: var(--text-secondary); }
+
+.ts-employee-card { padding: 0; overflow: hidden; }
+.ts-employee-summary {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 1.75rem 1.5rem; border: none; background: transparent; cursor: pointer;
+  color: var(--text-primary); text-align: left;
+}
+.ts-employee-summary__name { font-size: 1rem; font-weight: 700; }
+.ts-employee-summary__stats { display: flex; align-items: center; gap: 0.85rem; font-size: 0.9rem; font-weight: 700; color: var(--text-secondary); }
+.ts-employee-summary__chevron { transition: transform 0.15s ease; }
+.ts-employee-summary.open .ts-employee-summary__chevron { transform: rotate(180deg); }
+
+.ts-employee-shifts { padding: 0 1.5rem 1.5rem; border-top: 1px solid var(--border-divider); }
+.ts-shift-line { font-size: 0.78rem; padding: 0.6rem 0; }

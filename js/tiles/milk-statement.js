@@ -49,24 +49,12 @@ FarmSmart.registerTile({
         <span class="badge info" id="msBadge">Synced 4 min ago</span>
       </div>
 
-      <p class="ms-pickup-line">Last pickup: Today, 6:15 AM</p>
-
-      <div class="ms-volume-row">
-        <span class="ms-volume" id="msVolume">4,820<span class="unit">L</span></span>
-        <span class="ms-temp">3.5°C at pickup</span>
-      </div>
-
-      <div class="ms-stat-grid">
+      <div class="ms-stat-grid ms-stat-grid--card">
         <div class="ms-stat"><p class="stat-label">BMCC</p><p class="stat-value">145,000<small> cells/mL</small></p></div>
         <div class="ms-stat"><p class="stat-label">TBC</p><p class="stat-value">12,000<small> cfu/mL</small></p></div>
-        <div class="ms-stat"><p class="stat-label">Fat</p><p class="stat-value" id="msFat">4.2%</p></div>
-        <div class="ms-stat"><p class="stat-label">Protein</p><p class="stat-value" id="msProtein">3.6%</p></div>
       </div>
 
-      <div class="ms-highlight">
-        <span class="stat-label">Milk Solids</span>
-        <span class="stat-value-lg" id="msKgMs">376.0 kg MS</span>
-      </div>
+      <div id="msCardTrendsList" class="ms-trends-list"></div>
 
       <button class="card-btn" id="msDetailsBtn"><i class="ti ti-chart-bar"></i>View details</button>
     </div>
@@ -76,21 +64,25 @@ FarmSmart.registerTile({
         <button class="close-btn" id="msBackBtn" aria-label="Back">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         </button>
-        <h1>This Month</h1>
+        <h1>Milk Statement</h1>
+      </div>
+
+      <p class="ms-pickup-line" style="margin: 0 1.5rem 1.5rem;">Last pickup: Today, 6:15 AM · 3.5°C</p>
+
+      <div class="card" style="margin: 0 1.5rem 1.25rem;">
+        <div class="ms-stat-grid">
+          <div class="ms-stat"><p class="stat-label">BMCC</p><p class="stat-value">145,000<small> cells/mL</small></p></div>
+          <div class="ms-stat"><p class="stat-label">TBC</p><p class="stat-value">12,000<small> cfu/mL</small></p></div>
+        </div>
+
+        <div class="ms-highlight">
+          <span class="stat-label">Milk Solids</span>
+          <span class="stat-value-lg" id="msKgMs">376.0 kg MS</span>
+        </div>
       </div>
 
       <div class="ms-month-row">
-        <div class="ms-month-box"><p class="stat-label">Volume (L)</p><p class="stat-value" id="msMonthVolume">132,400 L</p></div>
-        <div class="ms-month-box"><p class="stat-label">Milk Solids</p><p class="stat-value" id="msMonthKgMs">9,850 kg MS</p></div>
-      </div>
-
-      <div class="card">
-        <span class="card-title" style="margin-bottom:0.5rem;display:block;">Trends</span>
-        <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 1.25rem;">
-          Each pickup vs. the same-length period right before it — e.g.
-          "3d" compares the last 3 pickups' average to the 3 before that.
-        </p>
-        <div id="msTrendsList"></div>
+        <div class="ms-month-box" style="flex:1;"><p class="stat-label">Milk Solids this month</p><p class="stat-value" id="msMonthKgMs">9,850 kg MS</p></div>
       </div>
 
       <div class="card ms-payment-card" style="margin-bottom:6vh;">
@@ -123,33 +115,20 @@ FarmSmart.registerTile({
 
       const dailyVolume = farm.herdSize * MS_LITRES_PER_COW_PER_DAY;
       const dailyKgMs = dailyVolume * (MS_FAT_PCT + MS_PROTEIN_PCT) / 100;
-
-      const monthVolume = dailyVolume * MS_DAYS_PER_MONTH;
       const monthKgMs = dailyKgMs * MS_DAYS_PER_MONTH;
 
       const qualityBonus = monthKgMs * MS_QUALITY_BONUS_PER_KG_MS;
       const estimatedPayment = (monthKgMs * MS_BASE_RATE_PER_KG_MS) + qualityBonus;
 
-      document.getElementById('msVolume').innerHTML = msFormatNumber(dailyVolume) + '<span class="unit">L</span>';
       document.getElementById('msKgMs').textContent = dailyKgMs.toFixed(1) + ' kg MS';
-      document.getElementById('msFat').textContent = MS_FAT_PCT + '%';
-      document.getElementById('msProtein').textContent = MS_PROTEIN_PCT + '%';
-
-      document.getElementById('msMonthVolume').textContent = msFormatNumber(monthVolume) + ' L';
       document.getElementById('msMonthKgMs').textContent = msFormatNumber(monthKgMs) + ' kg MS';
       document.getElementById('msBonusValue').textContent = '+' + msFormatCurrency(qualityBonus);
       document.getElementById('msPaymentValue').textContent = msFormatCurrency(estimatedPayment);
     }
 
-    // ---- Trends: 3-day and 7-day % change per metric ----
-    // Demo history only (no real backend) — generated once when the
-    // tile loads, so the numbers stay stable while you have the app
-    // open rather than jumping around every time you reopen "View
-    // details". A fresh page load gets a fresh (but still plausible)
-    // history. Each metric compares its most recent N-pickup average
-    // to the N pickups right before that — e.g. "3d" = last 3 vs. the
-    // 3 before them — which is a clearer, more actionable read for a
-    // farmer than comparing to a single distant day.
+    // ---- Trends: 3-day and 7-day % change, BMCC and TBC only (the 2
+    // metrics that matter most for quality grading) — shown directly
+    // on the card, not behind "View details". ----
     const MS_HISTORY_LENGTH = 14; // enough for two non-overlapping 7-pickup windows
 
     function generateHistory(base, variancePct) {
@@ -179,20 +158,16 @@ FarmSmart.registerTile({
       return `${arrow} ${sign}${pct.toFixed(1)}%`;
     }
 
-    // Which direction is GOOD for each metric: more volume/fat/protein
-    // is generally positive, while lower BMCC/TBC (fewer cells/bacteria)
-    // is the sign of better milk quality — so their trend colors are
-    // deliberately inverted from the others.
+    // Lower BMCC/TBC (fewer cells/bacteria) is the sign of better milk
+    // quality, so a downward trend is colored GOOD for both.
     const msTrendMetrics = [
-      { label: 'Volume',   history: generateHistory(4820, 0.06), goodDirection: 'up' },
-      { label: 'BMCC',     history: generateHistory(145000, 0.12), goodDirection: 'down' },
-      { label: 'TBC',      history: generateHistory(12000, 0.15), goodDirection: 'down' },
-      { label: 'Fat %',    history: generateHistory(MS_FAT_PCT, 0.04), goodDirection: 'up' },
-      { label: 'Protein %', history: generateHistory(MS_PROTEIN_PCT, 0.04), goodDirection: 'up' },
+      { label: 'BMCC', history: generateHistory(145000, 0.12), goodDirection: 'down', emphasize: true },
+      { label: 'TBC',  history: generateHistory(12000, 0.15), goodDirection: 'down', emphasize: true },
     ];
 
-    function renderTrends() {
-      const el = document.getElementById('msTrendsList');
+    function renderTrends(targetElId) {
+      const el = document.getElementById(targetElId);
+      if (!el) return;
       el.innerHTML = msTrendMetrics.map((m) => {
         const t3 = computeTrendPct(m.history, 3);
         const t7 = computeTrendPct(m.history, 7);
@@ -201,12 +176,12 @@ FarmSmart.registerTile({
           const isGood = m.goodDirection === 'up' ? pct > 0 : pct < 0;
           return isGood ? 'var(--color-green)' : 'var(--color-red)';
         };
-        return `<div class="row-line">
-          <span class="k">${m.label}</span>
-          <span class="v" style="display:flex;gap:0.75rem;">
+        const cells = `
             <span style="color:${colorFor(t3)};">${formatTrend(t3)} <small style="opacity:0.7;">3d</small></span>
-            <span style="color:${colorFor(t7)};">${formatTrend(t7)} <small style="opacity:0.7;">7d</small></span>
-          </span>
+            <span style="color:${colorFor(t7)};">${formatTrend(t7)} <small style="opacity:0.7;">7d</small></span>`;
+        return `<div class="ms-trend-row ms-trend-row--emphasize">
+          <span class="ms-trend-row__label">${m.label}</span>
+          <span class="ms-trend-row__cells ms-trend-row__cells--emphasize">${cells}</span>
         </div>`;
       }).join('');
     }
@@ -228,7 +203,7 @@ FarmSmart.registerTile({
     refreshForActiveFarm();
     updateVisibilityForUser();
     refreshSyncBadge();
-    renderTrends();
+    renderTrends('msCardTrendsList');
     setInterval(refreshSyncBadge, 20000);
   },
 });

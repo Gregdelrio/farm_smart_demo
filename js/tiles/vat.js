@@ -35,6 +35,7 @@ FarmSmart.registerTile({
       </div>
       <p class="vat-meta" id="meta" style="display:none;"></p>
       <button class="card-btn" id="vatDetailsBtn"><i class="ti ti-chart-line"></i>View details</button>
+      <button class="card-btn" id="vatSimulateAlertBtn"><i class="ti ti-alert-triangle"></i>Simulate alert</button>
     </div>
 
     <div class="overlay" id="vatDetailsOverlay">
@@ -168,6 +169,13 @@ FarmSmart.registerTile({
       minVal.textContent = Math.min(...data).toFixed(1) + '°';
       maxVal.textContent = Math.max(...data).toFixed(1) + '°';
       buildTrendChart(data);
+
+      const simulateBtn = document.getElementById('vatSimulateAlertBtn');
+      if (simulateBtn) {
+        simulateBtn.innerHTML = alertOn
+          ? '<i class="ti ti-check"></i>Back to normal'
+          : '<i class="ti ti-alert-triangle"></i>Simulate alert';
+      }
     }
 
     // "Synced X min ago" badge — refreshes periodically so it feels live.
@@ -179,6 +187,10 @@ FarmSmart.registerTile({
       buildTrendChart(vatAlert ? ALERT_READINGS : NORMAL_READINGS); // redraw with "now" up to date
       document.getElementById('vatDetailsOverlay').classList.add('show');
     });
+    // Visible demo button — same effect as the double-tap-the-frame
+    // shortcut below, but discoverable without needing to know that
+    // gesture exists (handy for showing this live to someone).
+    document.getElementById('vatSimulateAlertBtn').addEventListener('click', () => setVatState(!vatAlert));
     document.getElementById('vatBackBtn').addEventListener('click', () => {
       document.getElementById('vatDetailsOverlay').classList.remove('show');
     });

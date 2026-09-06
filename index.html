@@ -46,6 +46,7 @@
 <link rel="stylesheet" href="css/tiles/milk-statement.css">
 <link rel="stylesheet" href="css/tiles/gates.css">
 <link rel="stylesheet" href="css/tiles/roster.css">
+<link rel="stylesheet" href="css/tiles/timesheet.css">
 </head>
 <body>
 
@@ -53,6 +54,19 @@
        at the top of css/base.css for why this wrapper exists (it's what
        keeps the app phone-sized and centered on a desktop browser). -->
   <div id="appFrame">
+
+  <!-- ============================================================
+       DEMO BANNER — shown once, above everything else, so people
+       don't hesitate to tap around. Dismissible; remembers the
+       dismissal via localStorage (see js/core.js §1b) so it doesn't
+       reappear on every visit once closed.
+  ============================================================ -->
+  <div class="demo-banner" id="demoBanner">
+    <span class="demo-banner__text"><i class="ti ti-flask"></i>This is a demo — feel free to tap buttons and edit values, nothing will break.</span>
+    <button class="demo-banner__close" id="demoBannerClose" aria-label="Dismiss">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
 
   <!-- ============================================================
        HEADER
@@ -183,6 +197,7 @@
   <script src="js/tiles/milking.js"></script>
   <script src="js/tiles/milk-statement.js"></script>
   <script src="js/tiles/gates.js"></script>
+  <script src="js/tiles/timesheet.js"></script>
   <script src="js/tiles/roster.js"></script>
 </body>
 </html>

@@ -334,13 +334,29 @@ function notifyAppOpened() {
 // the wheel picker's individual value rows) from being logged. ----
 FarmSmart.sessionClicks = [];
 
+// Friendly names for the ntfy click summary — keyed by each tile's
+// registerTile({id}). Falls back to the raw id for any tile added
+// later and not listed here.
+const TILE_DISPLAY_NAMES = {
+  vat: 'Milk Vat',
+  crossing: 'Road Crossing',
+  milking: 'Live Milking',
+  'milk-statement': 'Milk Statement',
+  gates: 'Gates',
+  roster: 'Roster',
+};
+
 document.addEventListener('click', (e) => {
   const el = e.target.closest('button, .farm-picker, .user-picker, .sheet-row');
   if (!el) return;
   if (el.classList.contains('wheel-item') || el.dataset.track === 'skip') return;
 
   const label = el.dataset.track || el.getAttribute('aria-label') || el.textContent.trim().replace(/\s+/g, ' ').slice(0, 60);
-  if (label) FarmSmart.sessionClicks.push(label);
+  if (!label) return;
+
+  const tileEl = el.closest('[data-tile-name]');
+  const tileName = tileEl ? (TILE_DISPLAY_NAMES[tileEl.dataset.tileName] || tileEl.dataset.tileName) : null;
+  FarmSmart.sessionClicks.push(tileName ? `${tileName}: ${label}` : label);
 });
 
 document.addEventListener('visibilitychange', () => {
@@ -538,6 +554,31 @@ window.addEventListener('online', updateSyncStatus);
 window.addEventListener('offline', updateSyncStatus);
 
 /* ---------------------------------------------------------------------
+   9b. DEMO BANNER
+   ---------------------------------------------------------------------
+   Shown once above everything else (markup lives in index.html, right
+   above the header). Dismissing it hides it for the rest of this
+   browser/device via localStorage, same pattern as the theme toggle —
+   wrapped in try/catch so a blocked localStorage just means the
+   banner reappears next visit instead of breaking anything.
+--------------------------------------------------------------------- */
+const DEMO_BANNER_DISMISSED_KEY = 'farmsmart-demo-banner-dismissed';
+
+document.addEventListener('DOMContentLoaded', () => {
+  const banner = document.getElementById('demoBanner');
+  if (!banner) return;
+
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(DEMO_BANNER_DISMISSED_KEY) === '1'; } catch (e) { /* ignore */ }
+  if (dismissed) banner.style.display = 'none';
+
+  document.getElementById('demoBannerClose').addEventListener('click', () => {
+    banner.style.display = 'none';
+    try { localStorage.setItem(DEMO_BANNER_DISMISSED_KEY, '1'); } catch (e) { /* ignore — still hidden this session */ }
+  });
+});
+
+/* ---------------------------------------------------------------------
    10. BOOT
    Runs once the page (and every tile script before this point) has
    loaded. Injects every registered tile's markup into #dashboard, in
@@ -547,7 +588,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const dashboard = document.getElementById('dashboard');
 
   FarmSmart.tiles.forEach((tile) => {
+    const childrenBefore = new Set(dashboard.children);
     dashboard.insertAdjacentHTML('beforeend', tile.html);
+    // Tag every top-level element this tile just added with its id, so
+    // click tracking (section 6) can report which tile a button
+    // belongs to. Tagging the elements directly (not wrapping them)
+    // keeps #dashboard's CSS grid children exactly as before.
+    Array.from(dashboard.children).forEach((child) => {
+      if (!childrenBefore.has(child)) child.dataset.tileName = tile.id;
+    });
     if (typeof tile.init === 'function') tile.init();
   });
 
