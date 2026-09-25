@@ -1,0 +1,619 @@
+/* =====================================================================
+   FARM PLAN TILE (farm-plan)
+   Uses base.css variables and components; only tile-specific rules here.
+   Colours on top of the plan photo / satellite imagery use fixed values
+   on purpose (white rings, #1c1c1a on yellow) — like base.css's badges,
+   they must read the same on any background, in either theme.
+   ===================================================================== */
+
+#fp-card [hidden],
+#fp-overlay [hidden] { display: none !important; }
+
+/* ---------- Dashboard card ---------- */
+.fp-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 0 0 1vh;
+  border: 1px solid var(--border-card);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg-card-alt);
+  isolation: isolate;            /* keeps Leaflet's z-indexes inside the card */
+}
+.fp-preview-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.fp-preview-map { position: absolute; inset: 0; }
+.fp-preview-map.leaflet-container { background: var(--bg-card-alt); }
+.fp-preview .leaflet-control-attribution { font-size: 9px; padding: 0 4px; }
+.fp-preview-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1001;                 /* above every Leaflet layer and control */
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+
+/* ---------- Overlay ---------- */
+.fp-ov-heading { display: flex; flex-direction: column; min-width: 0; }
+.fp-ov-farm {
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Content column: same 640px column as .overlay-header, and a size
+   container so cqw-based components (.card-btn, .badge) size against
+   this column rather than the whole #appFrame. */
+.fp-ov-body {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 1.5rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  container-type: inline-size;
+}
+
+#fp-overlay .card-btn { font-size: clamp(0.95rem, 4cqw, 1.1rem); }
+#fp-overlay .badge { font-size: clamp(0.72rem, 3.2cqw, 0.85rem); padding: 0.3rem 0.75rem; }
+#fp-overlay .card-btn.danger { background: var(--color-red-bg); color: var(--color-red); }
+
+/* ---------- Working area ---------- */
+.fp-work { display: flex; flex-direction: column; gap: 0.75rem; }
+
+/* ---------- Empty state ---------- */
+.fp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 34ch;
+  margin: 2rem auto;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.fp-empty p { margin: 0; line-height: 1.5; }
+.fp-empty-title { color: var(--text-primary); font-weight: 800; font-size: 1.1rem; }
+.fp-empty-icon { font-size: 3rem; color: var(--accent-yellow-text); }
+.fp-empty .card-btn { margin-top: 0.5rem; }
+
+/* ---------- Plan ---------- */
+
+
+
+.fp-dot { flex: none; display: inline-block; }
+.fp-dot.paddock { width: 11px; height: 11px; border-radius: 50%; background: var(--color-green); }
+.fp-dot.ref {
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  background: var(--accent-yellow);
+  border: 1.5px solid #1c1c1a;
+}
+
+
+.fp-hint { margin: 0; font-size: 0.85rem; line-height: 1.45; color: var(--text-secondary); }
+
+
+/* ---------- Markers on the map ---------- */
+
+/* Paddock: round green marker */
+.fp-pin.paddock {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-green);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Reference point: yellow diamond, centre dot = the exact position */
+.fp-pin.ref {
+  position: relative;
+  width: 17px;
+  height: 17px;
+  transform: rotate(45deg);
+  background: var(--accent-yellow);
+  border: 2px solid #1c1c1a;
+  box-shadow: 0 0 0 2px #fff, 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.fp-pin.ref::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #1c1c1a;
+}
+.fp-pin.ref.nogps { background: rgba(255, 255, 255, 0.92); border-style: dashed; }
+
+@keyframes fp-pulse { 50% { scale: 1.25; } }
+
+.fp-label {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 16px);
+  transform: translateX(-50%);
+  max-width: 140px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.3;
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.fp-pin.ref + .fp-label {
+  top: auto;
+  bottom: calc(50% + 15px);
+  background: var(--accent-yellow);
+  color: #1c1c1a;
+}
+
+/* ---------- Alignment panel ---------- */
+.fp-calib:empty { display: none; }
+.fp-calib {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+}
+.fp-calib-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.fp-calib-title { font-weight: 800; color: var(--text-primary); }
+.fp-calib-msg { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--text-secondary); }
+.fp-calib-msg.warn { color: var(--color-red); }
+.fp-ref-list { list-style: none; margin: 0; padding: 0; }
+.fp-ref-list li:last-child .row-line { border-bottom: none; }
+.fp-ref-row {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fp-ref-row .k { display: inline-flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.fp-residual { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+/* ---------- Satellite ---------- */
+.fp-banner {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  background: var(--bg-card-alt);
+  color: var(--text-secondary);
+}
+.fp-banner > span { flex: 1 1 200px; }
+.fp-banner.warn { box-shadow: inset 3px 0 0 var(--color-red); }
+.fp-banner.pick { background: var(--accent-yellow); color: #1c1c1a; font-weight: 700; }
+#fp-overlay .fp-banner .card-btn {
+  width: auto;
+  margin: 0;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+  border-radius: 12px;
+}
+.fp-banner.pick .card-btn { background: rgba(0, 0, 0, 0.14); color: #1c1c1a; }
+
+.fp-map {
+  height: 62vh;
+  height: 62dvh;
+  min-height: 320px;
+  border-radius: 16px;
+  overflow: hidden;
+  isolation: isolate;            /* keeps Leaflet's internal z-indexes inside the map */
+  background: var(--bg-card-alt);
+}
+.fp-map.leaflet-container { background: var(--bg-card-alt); }   /* shown around the plan while satellite is off */
+.fp-map.picking.leaflet-container,
+.fp-map.picking .leaflet-interactive { cursor: crosshair; }
+.fp-leaflet-icon { background: none; border: 0; display: grid; place-items: center; }
+
+/* ---------- Edit sheet ---------- */
+#fp-sheet-title { margin: 0; }
+.fp-sheet-body { display: flex; flex-direction: column; gap: 0.9rem; }
+.fp-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.fp-field input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--border-divider);
+  border-radius: 12px;
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.fp-field input::placeholder { color: var(--text-faint); font-weight: 500; }
+.fp-field input[aria-invalid="true"] { border-color: var(--color-red); }
+.fp-field-row { display: flex; gap: 0.6rem; }
+.fp-help { margin: 0; font-size: 0.82rem; line-height: 1.45; color: var(--text-muted); }
+.fp-sheet-body > .card-btn { margin-top: 0; }
+.fp-error { margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--color-red); }
+.fp-error:empty { display: none; }
+.fp-sheet-actions { display: flex; gap: 0.6rem; }
+.fp-sheet-actions .card-btn { flex: 1; margin-top: 0.25rem; }
+
+/* ---------- Keyboard focus ---------- */
+.fp-po-ctl input:focus-visible,
+.fp-preview-hit:focus-visible,
+.fp-ref-row:focus-visible,
+.fp-leaflet-icon:focus-visible,
+.fp-field input:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+/* ---------- Plan photo over the satellite map ---------- */
+.fp-po-ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 0.25rem;
+}
+.fp-po-end {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.fp-po-ctl input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  height: 2.75rem;          /* comfortable with gloves */
+  margin: 0;
+  accent-color: var(--accent-yellow);
+}
+.leaflet-container img.fp-plan-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none !important;
+  max-height: none !important;
+  transform-origin: 0 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Reference point on the satellite map: where it sits on the plan photo
+   (hollow, draggable). The solid diamond is its fixed GPS position. */
+.fp-pin.ref.onplan {
+  background: transparent;
+  border: 3px solid var(--accent-yellow);
+  box-shadow: 0 0 0 1.5px #1c1c1a, 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.fp-pin.ref.onplan::after { background: var(--accent-yellow); box-shadow: 0 0 0 1px #1c1c1a; }
+.fp-pin.ref.onplan.nogps { border-style: dashed; }
+.fp-leaflet-icon.fp-pending .fp-pin { animation: fp-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .fp-leaflet-icon.fp-pending .fp-pin { animation: none; }
+}
+
+/* ---------- Satellite image date ---------- */
+.fp-imgdate {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.fp-imgdate i { font-size: 1.05rem; margin-top: 0.05rem; color: var(--accent-yellow-text); }
+.fp-imgdate strong { color: var(--text-primary); }
+.fp-imgdate-note { color: var(--text-muted); }
+
+/* Locked slider (plan not aligned yet) */
+.fp-po-ctl.locked { opacity: 0.45; }
+.fp-po-ctl.locked input[type="range"] { cursor: not-allowed; }
+.fp-po-note { margin: -0.4rem 0 0; font-size: 0.82rem; line-height: 1.45; color: var(--text-muted); text-align: center; }
+
+
+/* ---------- Paddock badge on the map ---------- */
+.fp-pd {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+}
+.fp-pd-halo {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--st);
+  opacity: 0.28;
+  box-shadow: 0 0 0 2px var(--st);
+  pointer-events: none;
+}
+.fp-pd-pill {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 150px;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: var(--st);
+  color: var(--st-text);
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  line-height: 1.15;
+  text-align: center;
+  white-space: nowrap;
+}
+.fp-pd-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+.fp-pd-sub { font-size: 0.66rem; font-weight: 600; opacity: 0.9; }
+.fp-pd-icon.fp-pending .fp-pd { animation: fp-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .fp-pd-icon.fp-pending .fp-pd { animation: none; }
+}
+
+/* ---------- Status legend ---------- */
+.fp-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.82rem; color: var(--text-secondary); }
+.fp-legend:empty { display: none; }
+.fp-legend-item { display: inline-flex; align-items: center; gap: 0.4rem; }
+.fp-legend-item strong { color: var(--text-primary); }
+.fp-status-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--st);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85), 0 0 0 2.5px rgba(0, 0, 0, 0.25);
+}
+
+/* ---------- Paddock sheet: state, last grazed, notes ---------- */
+.fp-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.fp-status-opt {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.9rem;           /* big enough with gloves */
+  padding: 0.45rem 0.7rem;
+  border: 2px solid var(--border-divider);
+  border-radius: 12px;
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+}
+.fp-status-opt[aria-checked="true"] {
+  border-color: var(--st);
+  box-shadow: inset 0 0 0 1px var(--st);
+  background: var(--bg-surface-raised);
+}
+.fp-status-opt[data-status=""] { grid-column: 1 / -1; }   /* "Not set" on its own row */
+.fp-status-opt:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+
+.fp-date-row { display: flex; gap: 0.5rem; }
+.fp-date-row input { flex: 1; min-width: 0; }
+.fp-mini-btn {
+  flex: none;
+  min-height: 3rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fp-mini-btn:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+.fp-field textarea {
+  width: 100%;
+  min-height: 5.5rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border-divider);
+  border-radius: 12px;
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1rem;              /* 16px: no iOS auto-zoom */
+  line-height: 1.45;
+  resize: vertical;
+}
+.fp-field textarea::placeholder { color: var(--text-faint); }
+.fp-field textarea:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+
+/* ---------- Paddocks / Reference points: tap = place, eye = show/hide ---------- */
+.fp-kinds { display: flex; }
+.fp-kinds .fp-kind { flex: 1; }
+.fp-kind {
+  display: flex;
+  min-width: 0;
+  border: 2px solid var(--border-divider);
+  border-radius: 14px;
+  background: var(--bg-card-alt);
+  overflow: hidden;
+}
+.fp-kind.active { border-color: var(--accent-yellow); background: var(--bg-surface-raised); }
+.fp-kind-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3rem;              /* big enough with gloves */
+  padding: 0 0.7rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: left;
+  cursor: pointer;
+}
+.fp-kind-eye {
+  flex: none;
+  width: 3rem;
+  border: 0;
+  border-left: 1px solid var(--border-divider);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.fp-kind.hidden-kind .fp-kind-main { color: var(--text-muted); }
+.fp-kind.hidden-kind .fp-kind-eye { color: var(--text-muted); }
+.fp-kind-main:focus-visible, .fp-kind-eye:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: -3px; }
+
+/* ---------- Imagery source ---------- */
+.fp-src { display: flex; flex-direction: column; gap: 0.6rem; }
+.fp-s2 { display: flex; flex-direction: column; gap: 0.6rem; }
+.fp-seg2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--bg-card-alt);
+}
+.fp-seg2 button {
+  min-height: 2.6rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fp-seg2 button[aria-checked="true"] {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.fp-seg2 button:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+.fp-s2-pass { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); }
+.fp-s2-pass select {
+  flex: 1;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--border-divider);
+  border-radius: 12px;
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1rem;              /* 16px: no iOS auto-zoom */
+}
+.fp-s2-note { margin: 0; font-size: 0.8rem; line-height: 1.45; color: var(--text-muted); }
+.fp-s2-note:empty { display: none; }
+
+/* ---------- Collapsible "Satellite alignment" ---------- */
+.fp-calib-details { display: flex; flex-direction: column; }
+.fp-calib-details > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;           /* comfortable tap target */
+  margin: -0.5rem 0;
+  cursor: pointer;
+  user-select: none;
+}
+.fp-calib-details > summary::-webkit-details-marker { display: none; }
+.fp-calib-details > summary .fp-calib-title { flex: 1; }
+.fp-calib-chev { font-size: 1.2rem; color: var(--text-secondary); transition: transform 0.2s ease; }
+.fp-calib-details[open] .fp-calib-chev { transform: rotate(180deg); }
+.fp-calib-details > summary:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 4px; border-radius: 6px; }
+.fp-calib-body { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.9rem; }
+@media (prefers-reduced-motion: reduce) { .fp-calib-chev { transition: none; } }
+
+/* Eyes: lit up (filled colour, open eye) while shown; off (grey, crossed-out eye) while hidden */
+.fp-kind-eye[aria-pressed="true"][data-eye="paddock"] { background: #2E9E44; color: #ffffff; }
+.fp-kind-eye[aria-pressed="true"][data-eye="ref"] { background: var(--accent-yellow); color: #1c1c1a; }
+.fp-kind-eye[aria-pressed="false"] { background: transparent; color: var(--text-muted); }
+
+/* Reference points inside "Satellite alignment" */
+.fp-kind-ref { margin-bottom: 0.25rem; }
+#fp-calib-msgs { display: flex; flex-direction: column; gap: 0.5rem; }
+#fp-calib-msgs:empty { display: none; }
+.fp-calib-body > .card-btn { margin-top: 0.25rem; }
+
+/* Paddock colour dots on the dashboard-card preview (the "minimised" view) */
+.fp-pv-dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--st);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* Small "open plan" button, shown once the preview map becomes interactive
+   (the full-card tap-to-open button steps aside so drag/pinch can reach the map) */
+.fp-preview-expand {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1001;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(28, 28, 26, 0.55);
+  color: #ffffff;
+  font-size: 1.1rem;
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+}
+.fp-preview-expand:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }

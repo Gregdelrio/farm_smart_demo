@@ -344,6 +344,10 @@ const TILE_DISPLAY_NAMES = {
   'milk-statement': 'Milk Statement',
   gates: 'Gates',
   roster: 'Roster',
+  timesheet: 'Timesheet',
+  'shift-clock': 'Shift Clock',
+  'daily-tasks': 'Daily Tasks',
+  'farm-plan': 'Farm Plan',
 };
 
 document.addEventListener('click', (e) => {
@@ -597,7 +601,13 @@ document.addEventListener('DOMContentLoaded', () => {
     Array.from(dashboard.children).forEach((child) => {
       if (!childrenBefore.has(child)) child.dataset.tileName = tile.id;
     });
-    if (typeof tile.init === 'function') tile.init();
+    // try/catch: one broken tile must never stop the tiles after it
+    // from mounting — log the error and carry on with the next one.
+    try {
+      if (typeof tile.init === 'function') tile.init();
+    } catch (err) {
+      console.error(`[FarmSmart] Tile "${tile.id}" failed to start:`, err);
+    }
   });
 
   // Initial paint of header state.
