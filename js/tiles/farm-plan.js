@@ -158,7 +158,7 @@
           <button type="button" role="radio" data-src="s2" aria-checked="true">Recent (less detailed)</button>
         </div>
         <div class="fp-s2" id="fp-s2" hidden>
-          <label class="fp-s2-pass"><span>Satellite pass</span><select id="fp-s2-date"></select></label>
+          <p class="fp-s2-date-display" id="fp-s2-date"></p>
           <p class="fp-s2-note" id="fp-s2-note"></p>
         </div>
       </div>
@@ -714,7 +714,6 @@
       setLayerVisible(kind, !(kind === 'ref' ? state.showRefs : state.showPaddocks));
     }));
     els.srcBtns.forEach(b => b.addEventListener('click', () => setSource(b.dataset.src)));
-    els.s2Date.addEventListener('change', () => { state.s2Date = els.s2Date.value; applySource(); });
     els.uploadBtn.addEventListener('click', () => els.file.click());
     els.replaceBtn.addEventListener('click', onReplaceClick);
     els.file.addEventListener('change', () => {
@@ -891,13 +890,13 @@
     const L = window.L, c = state.calib, d = state.data;
     els.previewMap.hidden = false;
     if (!state.pmap) {
-      // Interactive, but gently: on touch, panning needs two fingers (pinch) so a
-      // one-finger swipe still scrolls the dashboard instead of dragging the map.
-      // The mouse wheel is left alone too, so it never hijacks page scrolling.
-      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      // One-finger drag pans the preview map directly (by request) — note
+      // this means a swipe that starts on the preview pans the map instead
+      // of scrolling the dashboard page; the mouse wheel is still left
+      // alone so it never hijacks page scrolling on desktop.
       const map = L.map(els.previewMap, {
         zoomControl: false, attributionControl: true,
-        dragging: !isTouch, touchZoom: true, scrollWheelZoom: false, doubleClickZoom: true,
+        dragging: true, touchZoom: true, scrollWheelZoom: false, doubleClickZoom: true,
         boxZoom: false, keyboard: false, zoomSnap: 0.25, fadeAnimation: false
       }).setView([c.toGPS(0.5, 0.5).lat, c.toGPS(0.5, 0.5).lng], 15);
       map.attributionControl.setPrefix(false);
@@ -1639,8 +1638,15 @@
    */
   function focusBounds(corners) {
     const L = window.L, pads = state.data.paddocks;
-    if (!pads.length) return L.latLngBounds(corners);
-    return L.latLngBounds(pads.map(p => { const g = state.geo.toGPS(p.u, p.v); return L.latLng(g.lat, g.lng); }));
+    if (pads.length) return L.latLngBounds(pads.map(p => { const g = state.geo.toGPS(p.u, p.v); return L.latLng(g.lat, g.lng); }));
+    // No paddocks placed yet: zoom to a smaller region centred on the plan
+    // (paddock-sized, ~35% of the full extent) rather than the whole farm —
+    // once paddocks exist they take over via the branch above.
+    const c = state.calib;
+    const half = 0.175;
+    const zoomedCorners = [[0.5 - half, 0.5 - half], [0.5 + half, 0.5 - half], [0.5 + half, 0.5 + half], [0.5 - half, 0.5 + half]]
+      .map(([u, v]) => { const g = c.toGPS(u, v); return L.latLng(g.lat, g.lng); });
+    return L.latLngBounds(zoomedCorners);
   }
 
   function fitMap(corners) {
@@ -1763,18 +1769,14 @@
     const passes = state.s2Passes;
     els.s2Note.textContent = '';
     if (passes === null) {
-      els.s2Date.innerHTML = '<option>Loading…</option>';
-      els.s2Date.disabled = true;
+      els.s2Date.textContent = 'Loading…';
     } else if (!passes.length) {
-      els.s2Date.innerHTML = '<option>None found</option>';
-      els.s2Date.disabled = true;
+      els.s2Date.textContent = '';
       els.s2Note.textContent = state.s2Error || `No satellite pass over the farm in the last ${S2_DAYS_BACK} days.`;
     } else {
-      els.s2Date.disabled = false;
-      els.s2Date.innerHTML = passes.map(p => {
-        const cloud = Number.isFinite(p.cloud) ? `, ${Math.round(p.cloud)}% cloud` : '';
-        return `<option value="${p.date}"${p.date === state.s2Date ? ' selected' : ''}>${esc(fmtDateAU(p.date))}${cloud}</option>`;
-      }).join('');
+      const picked = passes.find(p => p.date === state.s2Date) || passes[0];
+      const cloud = picked && Number.isFinite(picked.cloud) ? `, ${Math.round(picked.cloud)}% cloud` : '';
+      els.s2Date.textContent = picked ? `${fmtDateAU(picked.date)}${cloud}` : '';
     }
   }
 
