@@ -1611,7 +1611,7 @@
   // Paddock pins are the big name+status pill at close zoom, but shrink to
   // a plain colour dot once zoomed out far enough that a whole plan's worth
   // of pills would just overlap into an unreadable mess.
-  const PADDOCK_PIN_SHRINK_ZOOM = 17;
+  const PADDOCK_PIN_SHRINK_ZOOM = 15.5;
   const PADDOCK_PIN_SHRINK_ZOOM_2 = 14; // even smaller once zoomed out further still
   function updatePaddockZoomClass(map) {
     const z = map.getZoom();
