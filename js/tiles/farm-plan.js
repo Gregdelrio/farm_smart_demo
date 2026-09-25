@@ -1169,11 +1169,17 @@
       if (armed && moved) onDragEnd(marker.getLatLng());
       armed = false; moved = false; pointerId = null;
       el.classList.remove('fp-armed');
+      if (map.dragging) map.dragging.enable(); // give panning back now the gesture on this marker is done
     }
     function cancelHold() { clearTimeout(timer); timer = null; }
 
     el.addEventListener('pointerdown', e => {
-      e.stopPropagation(); // don't let the map start panning under the hold
+      e.stopPropagation();
+      // Belt and braces: stopPropagation alone didn't reliably stop the
+      // map's own pan handler once this ships, so explicitly disable
+      // it for the whole gesture — a pointerdown that started ON the
+      // pin was never meant to pan the map underneath it.
+      if (map.dragging) map.dragging.disable();
       pointerId = e.pointerId;
       startPoint = map.mouseEventToContainerPoint(e);
       timer = setTimeout(() => {
@@ -1810,7 +1816,7 @@
     // themselves keeps a lone paddock from being zoomed in to the max.
     const bounds = focusBounds(corners);
     const hasPaddocks = state.data.paddocks.length > 0;
-    const z = Math.min(map.getBoundsZoom(bounds, false, window.L.point(hasPaddocks ? 140 : 24, hasPaddocks ? 140 : 24)), 20);
+    const z = Math.min(map.getBoundsZoom(bounds, false, window.L.point(hasPaddocks ? 40 : 24, hasPaddocks ? 40 : 24)), 20);
     map.setView(bounds.getCenter(), z);
   }
 
