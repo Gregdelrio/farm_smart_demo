@@ -1137,28 +1137,52 @@
 
   /** Requires a held press (not a quick tap) before a marker can actually
    *  be dragged — makes it hard to nudge a paddock by accident while
-   *  panning/tapping, without adding any extra step for the deliberate case. */
-  function attachLongPressDrag(marker) {
-    let timer = null, startPoint = null;
-    const cancel = () => { clearTimeout(timer); timer = null; };
+   *  panning/tapping, without adding any extra step for the deliberate case.
+   *  Fully custom (doesn't use Leaflet's own marker dragging): enabling
+   *  Leaflet's native drag mid-press can't catch a press already in
+   *  progress, since it only starts watching for a brand new mousedown —
+   *  the user would've had to let go and press again. Tracking the
+   *  pointer ourselves lets the same continuous hold flow straight into
+   *  the drag instead. */
+  function attachLongPressDrag(marker, map, onDragEnd) {
+    let timer = null, startPoint = null, armed = false, moved = false;
+
+    function onMove(ev) {
+      const point = map.mouseEventToContainerPoint(ev.touches ? ev.touches[0] : ev);
+      if (!armed) {
+        if (timer && startPoint && point.distanceTo(startPoint) > LONG_PRESS_MOVE_TOLERANCE) cancelHold();
+        return;
+      }
+      ev.preventDefault();
+      moved = true;
+      marker.setLatLng(map.containerPointToLatLng(point));
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+      cancelHold();
+      if (armed && moved) onDragEnd(marker.getLatLng());
+      armed = false; moved = false;
+      const el = marker.getElement();
+      if (el) el.classList.remove('fp-armed');
+    }
+    function cancelHold() { clearTimeout(timer); timer = null; }
+
     marker.on('mousedown', e => {
+      if (e.originalEvent) window.L.DomEvent.stopPropagation(e.originalEvent); // don't let the map start panning under the hold
       startPoint = e.containerPoint;
       timer = setTimeout(() => {
-        timer = null;
-        if (marker.dragging) marker.dragging.enable();
+        timer = null; armed = true;
         const el = marker.getElement();
         if (el) el.classList.add('fp-armed');
         if (navigator.vibrate) navigator.vibrate(15);
       }, LONG_PRESS_MS);
-    });
-    marker.on('mousemove', e => {
-      if (timer && startPoint && e.containerPoint.distanceTo(startPoint) > LONG_PRESS_MOVE_TOLERANCE) cancel();
-    });
-    marker.on('mouseup', cancel);
-    marker.on('dragend', () => {
-      if (marker.dragging) marker.dragging.disable(); // re-lock: next move needs a fresh long press too
-      const el = marker.getElement();
-      if (el) el.classList.remove('fp-armed');
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onUp);
     });
   }
 
@@ -1642,7 +1666,7 @@
   // a plain colour dot once zoomed out far enough that a whole plan's worth
   // of pills would just overlap into an unreadable mess.
   const PADDOCK_PIN_SHRINK_ZOOM = 15.5;
-  const PADDOCK_PIN_SHRINK_ZOOM_2 = 14; // even smaller once zoomed out further still
+  const PADDOCK_PIN_SHRINK_ZOOM_2 = 15; // even smaller once zoomed out further still
   function updatePaddockZoomClass(map) {
     const z = map.getZoom();
     map.getContainer().classList.toggle('fp-zoom-far', z < PADDOCK_PIN_SHRINK_ZOOM);
@@ -1703,8 +1727,7 @@
         title: `${p.name}: ${statusOf(p.status).label}`
       });
       m.on('click', () => { if (!state.pick && !state.editing) openEditor('paddock', p.id); });
-      m.on('dragend', () => onMapDrag('paddock', p.id, m.getLatLng()));
-      if (interactive) attachLongPressDrag(m);
+      if (interactive) attachLongPressDrag(m, map, latlng => onMapDrag('paddock', p.id, latlng));
       m.addTo(layer);
     });
 
