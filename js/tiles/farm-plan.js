@@ -1145,10 +1145,13 @@
    *  pointer ourselves lets the same continuous hold flow straight into
    *  the drag instead. */
   function attachLongPressDrag(marker, map, onDragEnd) {
-    let timer = null, startPoint = null, armed = false, moved = false;
+    const el = marker.getElement(); // must be called AFTER marker.addTo(map) — no DOM element before that
+    if (!el) return;
+    let timer = null, startPoint = null, armed = false, moved = false, pointerId = null;
 
     function onMove(ev) {
-      const point = map.mouseEventToContainerPoint(ev.touches ? ev.touches[0] : ev);
+      if (pointerId !== null && ev.pointerId !== pointerId) return;
+      const point = map.mouseEventToContainerPoint(ev);
       if (!armed) {
         if (timer && startPoint && point.distanceTo(startPoint) > LONG_PRESS_MOVE_TOLERANCE) cancelHold();
         return;
@@ -1157,32 +1160,30 @@
       moved = true;
       marker.setLatLng(map.containerPointToLatLng(point));
     }
-    function onUp() {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onUp);
+    function onUp(ev) {
+      if (pointerId !== null && ev.pointerId !== pointerId) return;
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
       cancelHold();
       if (armed && moved) onDragEnd(marker.getLatLng());
-      armed = false; moved = false;
-      const el = marker.getElement();
-      if (el) el.classList.remove('fp-armed');
+      armed = false; moved = false; pointerId = null;
+      el.classList.remove('fp-armed');
     }
     function cancelHold() { clearTimeout(timer); timer = null; }
 
-    marker.on('mousedown', e => {
-      if (e.originalEvent) window.L.DomEvent.stopPropagation(e.originalEvent); // don't let the map start panning under the hold
-      startPoint = e.containerPoint;
+    el.addEventListener('pointerdown', e => {
+      e.stopPropagation(); // don't let the map start panning under the hold
+      pointerId = e.pointerId;
+      startPoint = map.mouseEventToContainerPoint(e);
       timer = setTimeout(() => {
         timer = null; armed = true;
-        const el = marker.getElement();
-        if (el) el.classList.add('fp-armed');
+        el.classList.add('fp-armed');
         if (navigator.vibrate) navigator.vibrate(15);
       }, LONG_PRESS_MS);
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-      document.addEventListener('touchmove', onMove, { passive: false });
-      document.addEventListener('touchend', onUp);
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
     });
   }
 
@@ -1727,8 +1728,8 @@
         title: `${p.name}: ${statusOf(p.status).label}`
       });
       m.on('click', () => { if (!state.pick && !state.editing) openEditor('paddock', p.id); });
-      if (interactive) attachLongPressDrag(m, map, latlng => onMapDrag('paddock', p.id, latlng));
       m.addTo(layer);
+      if (interactive) attachLongPressDrag(m, map, latlng => onMapDrag('paddock', p.id, latlng));
     });
 
     // Reference points
