@@ -303,6 +303,21 @@
   margin: 0;
   accent-color: var(--accent-yellow);
 }
+.fp-pv-po-ctl {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1vh;
+}
+.fp-pv-po-ctl .fp-po-end { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+.fp-pv-po-ctl input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  height: 2.25rem;
+  margin: 0;
+  accent-color: var(--accent-yellow);
+}
+
 .leaflet-container img.fp-plan-overlay {
   position: absolute;
   left: 0;

@@ -108,7 +108,11 @@
     <img class="fp-preview-img" id="fp-thumb-img" alt="">
     <div class="fp-preview-map" id="fp-preview-map" hidden></div>
     <button type="button" class="fp-preview-hit" id="fp-thumb" aria-label="Open farm plan" data-track="Open plan (preview)"></button>
-    <button type="button" class="fp-preview-expand" id="fp-preview-expand" aria-label="Open farm plan" data-track="Open plan (expand)" hidden><i class="ti ti-arrows-maximize" aria-hidden="true"></i></button>
+  </div>
+  <div class="fp-pv-po-ctl" id="fp-pv-po-ctl" hidden>
+    <span class="fp-po-end">Plan</span>
+    <input type="range" id="fp-pv-po-range" min="0" max="100" step="5" value="50" aria-label="Plan to satellite">
+    <span class="fp-po-end">Satellite</span>
   </div>
   <button type="button" class="card-btn primary" id="fp-open-btn"><i class="ti ti-map-2"></i><span id="fp-open-label">Create plan</span></button>
   <input type="file" id="fp-file" accept="image/*" hidden>
@@ -158,7 +162,6 @@
           <button type="button" role="radio" data-src="s2" aria-checked="true">Recent (less detailed)</button>
         </div>
         <div class="fp-s2" id="fp-s2" hidden>
-          <p class="fp-s2-date-display" id="fp-s2-date"></p>
           <p class="fp-s2-note" id="fp-s2-note"></p>
         </div>
       </div>
@@ -673,13 +676,14 @@
     els = {
       card: q('fp-card'), overlay,
       thumb: q('fp-thumb'), thumbImg: q('fp-thumb-img'),
-      preview: q('fp-preview'), previewMap: q('fp-preview-map'), previewExpand: q('fp-preview-expand'),
+      preview: q('fp-preview'), previewMap: q('fp-preview-map'),
+      pvPoCtl: q('fp-pv-po-ctl'), pvPoRange: q('fp-pv-po-range'),
       openBtn: q('fp-open-btn'), openLabel: q('fp-open-label'), file: q('fp-file'),
       ovFarm: q('fp-ov-farm'), closeBtn: q('fp-close'),
       planEmpty: q('fp-plan-empty'), work: q('fp-work'),
       kinds: q('fp-kinds'), modeBtns: overlay.querySelectorAll('.fp-kind-main'), eyeBtns: overlay.querySelectorAll('.fp-kind-eye'),
       src: q('fp-src'), srcBtns: overlay.querySelectorAll('[data-src]'), s2Box: q('fp-s2'),
-      s2Date: q('fp-s2-date'), s2Note: q('fp-s2-note'),
+      s2Note: q('fp-s2-note'),
       hint: q('fp-hint'), banner: q('fp-banner'), map: q('fp-map'),
       legend: q('fp-legend'),
       poCtl: q('fp-po-ctl'), poRange: q('fp-po-range'), poNote: q('fp-po-note'), imgDate: q('fp-imgdate'),
@@ -701,7 +705,6 @@
   function bindEvents() {
     els.openBtn.addEventListener('click', openOverlay);
     els.thumb.addEventListener('click', openOverlay);
-    els.previewExpand.addEventListener('click', openOverlay);
     els.closeBtn.addEventListener('click', closeOverlay);
     els.modeBtns.forEach(b => b.addEventListener('click', () => {
       // "Add reference points" works as an on/off switch; back to paddocks when done.
@@ -725,6 +728,11 @@
     els.poRange.addEventListener('input', () => {
       state.satAmount = Number(els.poRange.value) / 100;
       applyOpacity();
+    });
+
+    els.pvPoRange.addEventListener('input', () => {
+      state.previewSatAmount = Number(els.pvPoRange.value) / 100;
+      if (state.pPlanLayer) state.pPlanLayer.setOpacity(1 - state.previewSatAmount);
     });
     // A locked slider can't be moved, so explain why when it's touched.
     els.poCtl.addEventListener('click', () => { if (els.poRange.disabled) toast(`Needs ${MIN_REFS} GPS points first`); });
@@ -878,11 +886,11 @@
   function showPreviewPhoto() {
     els.thumbImg.hidden = false;
     els.previewMap.hidden = true;
+    els.pvPoCtl.hidden = true;
     els.thumb.hidden = false;
-    els.previewExpand.hidden = true;
   }
 
-  const PREVIEW_PLAN_OPACITY = 0.5; // "half-way on the slider": plan and ground both visible
+  state.previewSatAmount = 0.5; // preview's own plan/satellite slider — starts in the middle
 
   async function renderPreviewMap() {
     try { await ensureLeaflet(); } catch (_) { showPreviewPhoto(); return; } // offline: photo only
@@ -920,7 +928,7 @@
       state.pNeedsFit = false;
     }
 
-    const opts = { url: state.imgUrl, w: d.imgW, h: d.imgH, toGPS: c.toGPS, opacity: PREVIEW_PLAN_OPACITY };
+    const opts = { url: state.imgUrl, w: d.imgW, h: d.imgH, toGPS: c.toGPS, opacity: 1 - state.previewSatAmount };
     if (state.pPlanLayer) state.pPlanLayer.update(opts);
     else state.pPlanLayer = new (getPlanOverlayClass())(opts).addTo(map);
 
@@ -936,8 +944,8 @@
       }).addTo(state.pDots);
     });
     els.thumb.hidden = true;
-    els.previewExpand.hidden = false;
     els.thumbImg.hidden = true;
+    els.pvPoCtl.hidden = false;
   }
 
   /* ---------------------------------------------------------------------
@@ -1084,7 +1092,6 @@
       state.tiles.setOpacity(satOp);
     }
     if (satOp === 0) renderImageryInfo(null);
-    else if (state.source === 's2' && !state.pick) renderImageryInfo(null); // the pass picker already shows the date
     else scheduleImageryInfo();
   }
 
@@ -1694,6 +1701,12 @@
   async function fetchImageryInfo() {
     const map = state.map;
     if (!map || !isOverlayOpen() || (state.calib.status !== 'ok' && !state.pick)) { renderImageryInfo(null); return; }
+    if (state.source === 's2') {
+      const passes = state.s2Passes;
+      const picked = passes && passes.length ? (passes.find(p => p.date === state.s2Date) || passes[0]) : null;
+      renderImageryInfo(picked ? { date: new Date(picked.date), label: 'Satellite image' } : null);
+      return;
+    }
     const seq = ++imgInfoSeq;
     const center = map.getCenter();
     const zoom = Math.min(Math.round(map.getZoom()), 19); // 19 = deepest real imagery level
@@ -1774,20 +1787,13 @@
 
   function renderSourceUi() {
     els.srcBtns.forEach(b => b.setAttribute('aria-checked', String(b.dataset.src === state.source)));
-    els.s2Box.hidden = state.source !== 's2';
-    if (state.source !== 's2') return;
     const passes = state.s2Passes;
-    els.s2Note.textContent = '';
-    if (passes === null) {
-      els.s2Date.textContent = 'Loading…';
-    } else if (!passes.length) {
-      els.s2Date.textContent = '';
-      els.s2Note.textContent = state.s2Error || `No satellite pass over the farm in the last ${S2_DAYS_BACK} days.`;
-    } else {
-      const picked = passes.find(p => p.date === state.s2Date) || passes[0];
-      const cloud = picked && Number.isFinite(picked.cloud) ? `, ${Math.round(picked.cloud)}% cloud` : '';
-      els.s2Date.textContent = picked ? `${fmtDateAU(picked.date)}${cloud}` : '';
-    }
+    els.s2Box.hidden = state.source !== 's2' || (passes !== null && passes.length > 0); // only shown while loading or on error — the date itself now shows via fp-imgdate
+    if (state.source !== 's2') return;
+    if (passes === null) els.s2Note.textContent = '';
+    else if (!passes.length) els.s2Note.textContent = state.s2Error || `No satellite pass over the farm in the last ${S2_DAYS_BACK} days.`;
+    else els.s2Note.textContent = '';
+    scheduleImageryInfo(); // date now shows via the unified fp-imgdate, same as Detailed
   }
 
   /** Same idea as applySource(), for the small preview map on the dashboard card. */
