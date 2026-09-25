@@ -253,7 +253,9 @@
   function normalizeData(raw) {
     const d = emptyData();
     if (!raw || typeof raw !== 'object') return d;
-    if (raw.image && typeof raw.image.size === 'number' && raw.imgW > 0 && raw.imgH > 0) {
+    const isUrl = typeof raw.image === 'string' && raw.image.length > 0;
+    const isFreshBlob = raw.image && typeof raw.image.size === 'number'; // not yet uploaded/persisted
+    if (raw.image && (isUrl || isFreshBlob) && raw.imgW > 0 && raw.imgH > 0) {
       d.image = raw.image; d.imgW = raw.imgW; d.imgH = raw.imgH;
     }
     const okPos = p => p && typeof p.id === 'string' && Number.isFinite(p.u) && Number.isFinite(p.v);
@@ -344,9 +346,99 @@
   }
 
   /* ---------------------------------------------------------------------
-     INDEXEDDB STORAGE
+     SUPABASE STORAGE (shared across every device — replaces the old
+     per-device IndexedDB store below). Same get(key)/put(key,value)
+     interface as before, so nothing else in this file needed to change.
+     key is always farmKey(farm), e.g. "farm:maguires" — the farm_id is
+     read out of it. image goes into Supabase Storage as a file; the
+     3 tables just hold the row data (see the SQL from setup).
   --------------------------------------------------------------------- */
+  const SUPABASE_URL = 'https://gissuvlnkztpbvghymmz.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdpc3N1dmxua3p0cGJ2Z2h5bW16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTUxMTAsImV4cCI6MjEwNTg3MTExMH0.iPshYfbWiiFNGjGQVKNxy55M5kbBci3Ti--4xbUOVM0';
+  const STORAGE_BUCKET = 'farm-plan-images';
+  let supabaseClient = null;
+  function sb() {
+    if (supabaseClient) return supabaseClient;
+    if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
+      throw new Error('supabase-js not loaded — check the <script> tag in index.html');
+    }
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return supabaseClient;
+  }
+
   const Store = {
+    async get(key) {
+      const farmId = key.replace(/^farm:/, '');
+      const client = sb();
+
+      const [{ data: planRow, error: planErr }, { data: refRows, error: refErr }, { data: pdkRows, error: pdkErr }] = await Promise.all([
+        client.from('farm_plans').select('*').eq('farm_id', farmId).maybeSingle(),
+        client.from('farm_plan_refs').select('*').eq('farm_id', farmId),
+        client.from('farm_plan_paddocks').select('*').eq('farm_id', farmId),
+      ]);
+      if (planErr) throw planErr;
+      if (refErr) throw refErr;
+      if (pdkErr) throw pdkErr;
+      if (!planRow) return null; // nothing saved for this farm yet
+
+      return {
+        image: planRow.image_path || null, // a public Storage URL (string), not a Blob
+        imgW: planRow.img_w || 0,
+        imgH: planRow.img_h || 0,
+        refs: (refRows || []).map(r => ({ id: r.id, name: r.name, u: r.u, v: r.v, lat: r.lat, lng: r.lng })),
+        paddocks: (pdkRows || []).map(p => ({
+          id: p.id, name: p.name, u: p.u, v: p.v, status: p.status || '',
+          lastGrazed: p.last_grazed || '', notes: p.notes || ''
+        })),
+      };
+    },
+
+    async put(key, value) {
+      const farmId = key.replace(/^farm:/, '');
+      const client = sb();
+
+      // Only re-upload if the image actually changed (a Blob means new/changed;
+      // an unchanged plan still carries its existing URL string through here).
+      let imagePath = typeof value.image === 'string' ? value.image : null;
+      if (value.image && typeof value.image !== 'string') {
+        const path = `${farmId}.jpg`;
+        const { error: upErr } = await client.storage.from(STORAGE_BUCKET).upload(path, value.image, { upsert: true, contentType: 'image/jpeg' });
+        if (upErr) throw upErr;
+        imagePath = client.storage.from(STORAGE_BUCKET).getPublicUrl(path).data.publicUrl;
+      }
+
+      const { error: planErr } = await client.from('farm_plans').upsert({
+        farm_id: farmId, image_path: imagePath, img_w: value.imgW, img_h: value.imgH, updated_at: new Date().toISOString(),
+      });
+      if (planErr) throw planErr;
+
+      // Simplest correct sync at this scale: replace every ref/paddock row
+      // for this farm rather than diffing which ones changed.
+      const { error: delRefErr } = await client.from('farm_plan_refs').delete().eq('farm_id', farmId);
+      if (delRefErr) throw delRefErr;
+      if (value.refs && value.refs.length) {
+        const { error: insRefErr } = await client.from('farm_plan_refs').insert(
+          value.refs.map(r => ({ id: r.id, farm_id: farmId, name: r.name, lat: r.lat, lng: r.lng, u: r.u, v: r.v }))
+        );
+        if (insRefErr) throw insRefErr;
+      }
+
+      const { error: delPdkErr } = await client.from('farm_plan_paddocks').delete().eq('farm_id', farmId);
+      if (delPdkErr) throw delPdkErr;
+      if (value.paddocks && value.paddocks.length) {
+        const { error: insPdkErr } = await client.from('farm_plan_paddocks').insert(
+          value.paddocks.map(p => ({ id: p.id, farm_id: farmId, name: p.name, status: p.status || null, last_grazed: p.lastGrazed || null, notes: p.notes || null, u: p.u, v: p.v }))
+        );
+        if (insPdkErr) throw insPdkErr;
+      }
+    },
+  };
+
+  /* ---------------------------------------------------------------------
+     INDEXEDDB STORAGE (kept, unused, in case Supabase needs to be rolled
+     back — the block above is what's actually wired up now)
+  --------------------------------------------------------------------- */
+  const LegacyIndexedDbStore = {
     db: null,
     open() {
       if (this.db) return Promise.resolve(this.db);
@@ -703,6 +795,7 @@
         toast('Default farm plan loaded — drag each pin onto its exact spot');
       } catch (err) {
         console.error('[farm-plan] seed load failed:', err);
+        toast('Default farm plan couldn\u2019t be loaded — check console, or upload one manually');
         raw = null; // fall back to an empty plan, same as before this feature existed
       }
     }
@@ -726,8 +819,11 @@
   }
 
   function setImageUrl() {
-    if (state.imgUrl) URL.revokeObjectURL(state.imgUrl);
-    state.imgUrl = state.data.image ? URL.createObjectURL(state.data.image) : '';
+    if (state.imgUrlIsBlob && state.imgUrl) URL.revokeObjectURL(state.imgUrl);
+    const img = state.data.image;
+    if (!img) { state.imgUrl = ''; state.imgUrlIsBlob = false; }
+    else if (typeof img === 'string') { state.imgUrl = img; state.imgUrlIsBlob = false; } // Supabase Storage URL
+    else { state.imgUrl = URL.createObjectURL(img); state.imgUrlIsBlob = true; } // fresh upload, not yet persisted
   }
 
   function afterDataChange() {
