@@ -13,7 +13,7 @@
 .fp-preview {
   position: relative;
   width: 100%;
-  aspect-ratio: 5 / 4;
+  aspect-ratio: 4 / 5;
   margin: 0 0 1vh;
   border: 1px solid var(--border-card);
   border-radius: 16px;
@@ -432,6 +432,7 @@
   opacity: 1;
   box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, 0.5);
 }
+.fp-zoom-very-far .fp-pd-halo { width: 8px; height: 8px; box-shadow: 0 0 0 1px #fff, 0 1px 3px rgba(0, 0, 0, 0.5); }
 @media (prefers-reduced-motion: reduce) {
   .fp-pd-icon.fp-pending .fp-pd { animation: none; }
 }

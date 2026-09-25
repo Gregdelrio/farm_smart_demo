@@ -171,8 +171,11 @@
       <!-- Paddock list: visible by default, replaces "Satellite alignment"
            as the everyday view once the plan is set up. -->
       <div class="fp-pdk-section" id="fp-pdk-section" hidden>
-        <p class="fp-pdk-section-title">Paddocks</p>
-        <ul class="fp-ref-list" id="fp-pdk-list" aria-label="Paddocks"></ul>
+        <button type="button" class="fp-calib-toggle" id="fp-pdk-toggle">
+          <span>Paddocks</span>
+          <i class="ti ti-chevron-down fp-calib-chev" aria-hidden="true"></i>
+        </button>
+        <ul class="fp-ref-list" id="fp-pdk-list" aria-label="Paddocks" hidden></ul>
       </div>
 
       <button type="button" class="fp-calib-toggle" id="fp-calib-toggle">
@@ -236,6 +239,7 @@
     showRefs: true,
     calibOpen: null,   // "Satellite alignment": null = automatic (open until aligned), else user's choice
     calibSectionOpen: null, // whole "Satellite alignment" section: null = automatic (visible until aligned, hidden after), else user's toggle choice
+    pdkListOpen: true, // "Paddocks" dropdown: starts open
     source: 's2',      // 'esri' (detailed, older) | 's2' (recent, less detailed) — recent is the default
     s2Date: '',        // YYYY-MM-DD pass shown
     s2Passes: null,    // [{ date, cloud }] for the current farm, null = not loaded
@@ -327,10 +331,11 @@
       if (p.source === 'esri' || p.source === 's2') state.source = p.source;
       state.calibOpen = typeof p.calibOpen === 'boolean' ? p.calibOpen : null;
       state.calibSectionOpen = typeof p.calibSectionOpen === 'boolean' ? p.calibSectionOpen : null;
+      state.pdkListOpen = typeof p.pdkListOpen === 'boolean' ? p.pdkListOpen : true;
     } catch (_) { /* private mode etc.: keep defaults */ }
   }
   function savePrefs() {
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify({ paddocks: state.showPaddocks, refs: state.showRefs, source: state.source, calibOpen: state.calibOpen, calibSectionOpen: state.calibSectionOpen })); } catch (_) {}
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify({ paddocks: state.showPaddocks, refs: state.showRefs, source: state.source, calibOpen: state.calibOpen, calibSectionOpen: state.calibSectionOpen, pdkListOpen: state.pdkListOpen })); } catch (_) {}
   }
 
   /** Accepts "-38.3001", "−38.3001" and "-38,3001". Returns {empty} | {invalid} | {value}. */
@@ -705,7 +710,7 @@
       poCtl: q('fp-po-ctl'), poRange: q('fp-po-range'), poNote: q('fp-po-note'), imgDate: q('fp-imgdate'),
       calib: q('fp-calib'), calibDetails: q('fp-calib-details'), calibBadge: q('fp-calib-badge'),
       calibMsgs: q('fp-calib-msgs'), refList: q('fp-ref-list'), refLabel: q('fp-ref-label'),
-      pdkSection: q('fp-pdk-section'), pdkList: q('fp-pdk-list'),
+      pdkSection: q('fp-pdk-section'), pdkList: q('fp-pdk-list'), pdkToggle: q('fp-pdk-toggle'),
       calibToggle: q('fp-calib-toggle'), calibToggleLabel: q('fp-calib-toggle-label'),
       uploadBtn: q('fp-upload-btn'), replaceBtn: q('fp-replace-btn'),
       sheetMask: q('fp-sheet-mask'), sheetTitle: q('fp-sheet-title'),
@@ -773,7 +778,12 @@
     });
     els.pdkSection.addEventListener('click', e => {
       const row = e.target.closest('[data-pdk-id]');
-      if (row) openEditor('paddock', row.dataset.pdkId);
+      if (row) { openEditor('paddock', row.dataset.pdkId); return; }
+      if (e.target.closest('#fp-pdk-toggle')) {
+        state.pdkListOpen = !state.pdkListOpen;
+        savePrefs();
+        renderPaddockList();
+      }
     });
     els.banner.addEventListener('click', e => {
       if (e.target.closest('#fp-pick-cancel')) cancelPick(true);
@@ -1186,15 +1196,23 @@
 
   function renderPaddockList() {
     const d = state.data;
-    els.pdkList.innerHTML = d.paddocks.map(p => {
+    const sorted = d.paddocks.slice().sort((a, b) => {
+      const da = daysSince(a.lastGrazed), db = daysSince(b.lastGrazed);
+      // Never grazed (null) counts as "longest ago" — goes first, same as
+      // the highest day count would.
+      return (db === null ? Infinity : db) - (da === null ? Infinity : da);
+    });
+    els.pdkList.innerHTML = sorted.map(p => {
       const st = statusOf(p.status);
       const days = daysSince(p.lastGrazed);
-      const sub = days === null ? st.label : `${st.label} · grazed ${days <= 0 ? 'today' : days + 'd ago'}`;
+      const sub = days === null ? `${st.label} · never grazed` : `${st.label} · grazed ${days <= 0 ? 'today' : days + 'd ago'}`;
       return `<li><button type="button" class="fp-ref-row" data-pdk-id="${esc(p.id)}" data-track="Open paddock (list)">` +
         `<span class="row-line"><span class="k"><span class="fp-dot paddock" aria-hidden="true"></span>${esc(p.name)}</span>` +
         `<span class="v">${esc(sub)}</span></span></button></li>`;
     }).join('');
     els.pdkSection.hidden = !d.paddocks.length;
+    els.pdkList.hidden = !state.pdkListOpen;
+    els.pdkToggle.classList.toggle('open', state.pdkListOpen);
   }
 
   const listFor = kind => (kind === 'ref' ? state.data.refs : state.data.paddocks);
@@ -1594,8 +1612,11 @@
   // a plain colour dot once zoomed out far enough that a whole plan's worth
   // of pills would just overlap into an unreadable mess.
   const PADDOCK_PIN_SHRINK_ZOOM = 17;
+  const PADDOCK_PIN_SHRINK_ZOOM_2 = 14; // even smaller once zoomed out further still
   function updatePaddockZoomClass(map) {
-    map.getContainer().classList.toggle('fp-zoom-far', map.getZoom() < PADDOCK_PIN_SHRINK_ZOOM);
+    const z = map.getZoom();
+    map.getContainer().classList.toggle('fp-zoom-far', z < PADDOCK_PIN_SHRINK_ZOOM);
+    map.getContainer().classList.toggle('fp-zoom-very-far', z < PADDOCK_PIN_SHRINK_ZOOM_2);
   }
 
   function onMapClick(e) {
