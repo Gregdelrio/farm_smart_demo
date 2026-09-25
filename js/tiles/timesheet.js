@@ -28,8 +28,11 @@
    - Award note: under the Pastoral Award 2020 (MA000035), farm and
      livestock hands have NO automatic Saturday/Sunday penalty —
      overtime instead kicks in once more than 152 hours are worked in
-     a rolling 4-week cycle, paid at 150% of the ordinary/casual rate.
-     For FLH1 casual ($32.18/hr from 1 July 2026), that's $48.27/hour.
+     a rolling 4-week cycle. For a casual FLH1, that's 150% of the
+     BASE rate ($25.74) plus the 25% casual loading added on top of
+     that same base — 175% of base total, i.e. $45.05/hour (confirmed
+     against a real payslip; it is NOT 150% of the everyday casual
+     rate of $32.18, which would give a different, incorrect number).
      This demo doesn't track the 4-week total, so the note is
      informational only — no per-shift or per-employee dollar amounts
      are shown.
@@ -116,6 +119,12 @@ function tsShiftHours(shift) {
 function tsShiftTimesLabel(shift) {
   return `${tsMinutesToLabel(shift.clockIn)}–${tsMinutesToLabel(shift.breakStart)} · ${tsMinutesToLabel(shift.breakEnd)}–${tsMinutesToLabel(shift.clockOut)}`;
 }
+function tsShiftTimesParts(shift) {
+  return [
+    `${tsMinutesToLabel(shift.clockIn)}–${tsMinutesToLabel(shift.breakStart)}`,
+    `${tsMinutesToLabel(shift.breakEnd)}–${tsMinutesToLabel(shift.clockOut)}`,
+  ];
+}
 
 FarmSmart.registerTile({
   id: 'timesheet',
@@ -142,13 +151,18 @@ FarmSmart.registerTile({
         <h1>Timesheet</h1>
       </div>
 
+      <p class="ts-today-line" id="tsOverlayTodayLine" style="margin: 0 1.5rem 1.5rem;">Today, Fri 5 Sep</p>
+
       <p class="ts-award-note">
         Under the <strong>Pastoral Award 2020 (MA000035)</strong>, farm and
         livestock hands have no automatic Saturday/Sunday penalty —
         overtime instead applies once more than 152 hours are worked
-        in a rolling 4-week cycle, paid at 150% of the ordinary rate
-        (for FLH1 casual: <strong>$48.27/hour</strong>). This demo
-        doesn't track the 4-week total.
+        in a rolling 4-week cycle. For a casual FLH1, that overtime is
+        150% of the <strong>base</strong> rate ($25.74) plus the 25%
+        casual loading added on top of that same base rate — 175% of
+        base in total, i.e. <strong>$45.05/hour</strong> (not 150% of
+        the everyday casual rate of $32.18). This demo doesn't track
+        the 4-week total.
       </p>
 
       <div id="tsEmployeeList" class="ts-employee-list" style="margin-bottom:6vh;"></div>
@@ -173,7 +187,9 @@ FarmSmart.registerTile({
 
     function renderToday() {
       const todayIndex = TS_PAYROLL_DAYS - 1;
-      document.getElementById('tsTodayLine').textContent = 'Today, ' + tsFormatDate(tsDateForDay(todayIndex));
+      const todayLine = 'Today, ' + tsFormatDate(tsDateForDay(todayIndex));
+      document.getElementById('tsTodayLine').textContent = todayLine;
+      document.getElementById('tsOverlayTodayLine').textContent = todayLine;
 
       const list = document.getElementById('tsTodayList');
       // Working-today people first, off-today people pushed to the
@@ -190,7 +206,9 @@ FarmSmart.registerTile({
         // Not working today: no "Off today" label, just blank — the
         // bottom position in the list is what communicates it.
         const farmBadge = farmId === 'off' ? '' : `<span class="ts-row__farm">${tsFarmName(farmId)}</span>`;
-        const times = todayShift ? `<span class="ts-row__shift">${tsShiftTimesLabel(todayShift)}</span>` : '';
+        const times = todayShift
+          ? tsShiftTimesParts(todayShift).map((part) => `<span class="ts-row__shift">${part}</span>`).join('')
+          : '';
         return `<div class="ts-row">
           <span class="ts-row__name">${emp.name}</span>
           ${farmBadge}

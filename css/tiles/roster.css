@@ -7,7 +7,23 @@
    in js/tiles/roster.js init().
    ===================================================================== */
 
+.roster-week-nav { display: flex; align-items: center; justify-content: center; gap: 3cqw; margin: 0 1.5rem 1vh; }
 .roster-week-label { font-size: 3.4cqw; color: var(--text-secondary); font-weight: 600; margin: 0 0 2vh; }
+.roster-week-nav .roster-week-label { margin: 0; text-align: center; flex: 1; }
+.roster-week-nav__btn {
+  width: 8cqw; height: 8cqw; min-width: 32px; min-height: 32px; border-radius: 50%;
+  background: var(--bg-card-alt); border: none; color: var(--text-primary);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
+}
+.roster-week-nav__btn svg { width: 45%; height: 45%; }
+.roster-week-nav__btn:disabled { opacity: 0.3; cursor: default; }
+
+.roster-readonly-banner {
+  display: flex; align-items: center; justify-content: center; gap: 1.5cqw;
+  font-size: 3cqw; font-weight: 700; color: var(--text-muted);
+  background: var(--bg-card-alt); border-radius: 10px;
+  margin: 0 1.5rem 1.5rem; padding: 1vh 0;
+}
 
 .roster-action-row { display: flex; flex-wrap: wrap; gap: 2cqw; margin-top: 2vh; }
 .roster-action-row .card-btn { flex: 1; min-width: 40%; margin-top: 0; }

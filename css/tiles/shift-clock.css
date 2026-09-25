@@ -1,0 +1,26 @@
+/* =====================================================================
+   TILE: SHIFT CLOCK
+   ===================================================================== */
+
+.sc-status-line {
+  font-size: 4cqw; font-weight: 700; color: var(--text-primary);
+  margin: 0 0 1vh;
+}
+
+.sc-location-line {
+  font-size: 3.2cqw; font-weight: 600; margin: 0 0 2vh;
+}
+.sc-location-line--ok { color: var(--color-green); display: flex; align-items: center; gap: 1.5cqw; }
+.sc-location-line--warn { color: var(--color-red); display: flex; align-items: center; gap: 1.5cqw; }
+.sc-location-line--unknown { color: var(--text-muted); display: flex; align-items: center; gap: 1.5cqw; }
+
+.sc-summary-line {
+  font-size: 3.3cqw; color: var(--text-secondary); font-weight: 600;
+  margin: 0 0 2vh;
+}
+
+.sc-actions { display: flex; flex-direction: column; gap: 1.2vh; margin-bottom: 1.5vh; }
+
+.sc-gps-note {
+  font-size: 2.7cqw; color: var(--text-muted); margin: 0; text-align: center;
+}

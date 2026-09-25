@@ -26,7 +26,7 @@
 }
 .ts-employee-summary__today { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); }
 .ts-no-past-shifts { padding: 1rem 0; font-size: 0.8rem; color: var(--text-muted); font-style: italic; }
-.ts-row__times { flex: 1; text-align: right; font-size: 2.9cqw; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.2vh; }
+.ts-row__times { flex: 1; text-align: right; font-size: 3.6cqw; font-weight: 600; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.3vh; }
 
 /* ---- Payroll overlay ---- */
 .ts-award-note {

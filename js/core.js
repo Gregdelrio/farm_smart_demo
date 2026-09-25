@@ -59,9 +59,9 @@ FarmSmart.registerTile = function (tile) {
    and the switcher sheet re-renders itself, no HTML edits needed.
 --------------------------------------------------------------------- */
 const FARMS = [
-  { id: 'laang',    name: 'Laang Farm',           meta: 'Dairy - Peter',  ownerFirstName: 'Peter',  herdSize: 355, roadName: 'Thorburns Road' },
-  { id: 'maguires', name: 'Maguires Road Dairy',  meta: 'Dairy - John',   ownerFirstName: 'John',   herdSize: 557, roadName: 'Maguires Road' },
-  { id: 'vickers',  name: 'Vickers Road Panmure', meta: 'Dairy - Damian', ownerFirstName: 'Damian', herdSize: 992, roadName: 'Vickers Road' },
+  { id: 'laang',    name: 'Laang Farm',           meta: 'Dairy - Peter',  ownerFirstName: 'Peter',  herdSize: 355, roadName: 'Thorburns Road', lat: -38.361, lng: 142.814 },
+  { id: 'maguires', name: 'Maguires Road Dairy',  meta: 'Dairy - John',   ownerFirstName: 'John',   herdSize: 557, roadName: 'Maguires Road', lat: -38.300, lng: 142.780 },
+  { id: 'vickers',  name: 'Vickers Road Panmure', meta: 'Dairy - Damian', ownerFirstName: 'Damian', herdSize: 992, roadName: 'Vickers Road', lat: -38.333, lng: 142.733 },
   // Add further farms here as plain objects — the switcher sheet in
   // js/core.js §2 renders straight from this array, so nothing else
   // needs to change. `herdSize`/`ownerFirstName` are used by the Live

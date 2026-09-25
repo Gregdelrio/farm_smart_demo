@@ -59,6 +59,15 @@ let rosterEmployees = [
 
 // rosterGrid[employeeId][dayIndex] = null (blank) | 'off' | a farm id
 let rosterGrid = {};
+// Which week is currently being viewed/edited: 0 = this week, negative
+// = past, positive = future. Navigation is capped a few weeks each
+// way (see ROSTER_WEEKS_BACK/FORWARD below) — past weeks are
+// read-only (already happened), current + future weeks stay
+// editable. Always reset to 0 when the roster overlay is closed, so
+// the dashboard card's live preview is always "this week".
+let currentWeekOffset = 0;
+const ROSTER_WEEKS_BACK = 4;
+const ROSTER_WEEKS_FORWARD = 3;
 function ensureGridRow(empId) {
   if (!rosterGrid[empId]) rosterGrid[empId] = Array(7).fill(null);
 }
@@ -131,16 +140,28 @@ function loadStaffingFromStorage() {
   } catch (e) { /* ignore corrupt/unavailable storage, fall back to the defaults above */ }
 }
 
-const ROSTER_GRID_STORAGE_KEY = 'farmsmart-roster-grid';
+const ROSTER_GRID_STORAGE_KEY_LEGACY = 'farmsmart-roster-grid'; // pre-week-navigation key, migrated below
+
+function gridStorageKeyForOffset(offset) {
+  const monday = weekDates(offset)[0];
+  return 'farmsmart-roster-grid-' + monday.toISOString().slice(0, 10);
+}
 
 function saveGridToStorage() {
   try {
-    localStorage.setItem(ROSTER_GRID_STORAGE_KEY, JSON.stringify(rosterGrid));
+    localStorage.setItem(gridStorageKeyForOffset(currentWeekOffset), JSON.stringify(rosterGrid));
   } catch (e) { /* storage unavailable — edits still work this session */ }
 }
 function loadGridFromStorage() {
   try {
-    const raw = localStorage.getItem(ROSTER_GRID_STORAGE_KEY);
+    let raw = localStorage.getItem(gridStorageKeyForOffset(currentWeekOffset));
+    // One-time migration: before week navigation existed, "this week"
+    // was saved under a single flat key with no date. Adopt it as
+    // this week's data the first time round, so upgrading to this
+    // version doesn't make an already-generated roster disappear.
+    if (!raw && currentWeekOffset === 0) {
+      raw = localStorage.getItem(ROSTER_GRID_STORAGE_KEY_LEGACY);
+    }
     if (!raw) return;
     const saved = JSON.parse(raw);
     // Only accept a saved row for an employee who still exists, and
@@ -179,8 +200,10 @@ function getMonday(d) {
   d.setHours(0, 0, 0, 0);
   return d;
 }
-function weekDates() {
+function weekDates(offset) {
+  if (offset === undefined) offset = currentWeekOffset;
   const monday = getMonday(new Date());
+  monday.setDate(monday.getDate() + offset * 7);
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(d.getDate() + i);
@@ -253,6 +276,14 @@ function generateRoster() {
   // Only cells still blank (null) are ever touched — anything already
   // set by hand (tap a cell before generating) is left alone.
   // ======================================================================
+
+  // Snapshot exactly what was already in the grid BEFORE this
+  // generation touches anything — used below (companion-boost pass)
+  // to tell "manually pre-set before hitting Generate" apart from
+  // "this same generation just decided it a moment ago". Only the
+  // latter is ever allowed to be reshuffled.
+  const preExisting = {};
+  rosterEmployees.forEach((e) => { preExisting[e.id] = rosterGrid[e.id].slice(); });
 
   // ---- Step 1: off-days (rules 1 + 2) ----
   // Off-days are LOAD-BALANCED across the week (picking whichever
@@ -413,6 +444,7 @@ function generateRoster() {
           if (other.id === e.id) return false;
           const otherFarm = rosterGrid[other.id][d];
           if (!otherFarm || otherFarm === 'off' || otherFarm === farmId) return false; // never touch a day off
+          if (preExisting[other.id][d] !== null) return false; // never move a cell that was set before this generation (manual or otherwise)
           if (!other.trainedFarms.includes(farmId)) return false;
           return farmCount(otherFarm) - 1 >= ROSTER_FARM_CONFIG[otherFarm].min;
         });
@@ -431,7 +463,7 @@ function generateRoster() {
       const cfg = ROSTER_FARM_CONFIG[farmId];
       let count = farmCount(farmId);
       while (count < cfg.min) {
-        let candidates = rosterEmployees.filter((e) => rosterGrid[e.id][d] === 'off' && e.trainedFarms.includes(farmId));
+        let candidates = rosterEmployees.filter((e) => rosterGrid[e.id][d] === 'off' && preExisting[e.id][d] === null && e.trainedFarms.includes(farmId));
         if (candidates.length === 0) break; // nobody trained for this farm is even off today — truly can't be helped
         candidates.sort((a, b) => {
           const aBreaksShared = a.partnerId && rosterGrid[a.partnerId][d] === 'off' ? 1 : 0;
@@ -469,7 +501,16 @@ FarmSmart.registerTile({
         <h1>Farm Roster</h1>
       </div>
 
-      <p class="roster-week-label" style="margin: 0 1.5rem 1.5rem;" id="rosterOverlayWeekLabel"></p>
+      <div class="roster-week-nav">
+        <button class="roster-week-nav__btn" id="rosterWeekPrevBtn" aria-label="Previous week">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <p class="roster-week-label" id="rosterOverlayWeekLabel"></p>
+        <button class="roster-week-nav__btn" id="rosterWeekNextBtn" aria-label="Next week">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <p class="roster-readonly-banner" id="rosterReadonlyBanner" style="display:none;"><i class="ti ti-lock"></i>This week has already passed — read-only</p>
 
       <!-- Legend + grid shown here for reference — "Share Roster"
            below draws its own canvas from the same data (see
@@ -565,12 +606,30 @@ FarmSmart.registerTile({
 
     function isOwner() { return FarmSmart.currentUser.role === 'Owner'; }
 
-    // ---- Week label ----
+    // ---- Week label + nav ----
+    function isPastWeek() { return currentWeekOffset < 0; }
+
     function renderWeekLabel() {
       const dates = weekDates();
-      const label = `${DOW_LABELS[0]} ${dates[0].getDate()} ${dates[0].toLocaleString('en-US', { month: 'short' })} – ${DOW_LABELS[6]} ${dates[6].getDate()} ${dates[6].toLocaleString('en-US', { month: 'short' })}`;
-      document.getElementById('rosterWeekLabel').textContent = label;
+      const label = currentWeekOffset === 0
+        ? `This week (${DOW_LABELS[0]} ${dates[0].getDate()} ${dates[0].toLocaleString('en-US', { month: 'short' })} – ${DOW_LABELS[6]} ${dates[6].getDate()} ${dates[6].toLocaleString('en-US', { month: 'short' })})`
+        : `${DOW_LABELS[0]} ${dates[0].getDate()} ${dates[0].toLocaleString('en-US', { month: 'short' })} – ${DOW_LABELS[6]} ${dates[6].getDate()} ${dates[6].toLocaleString('en-US', { month: 'short' })}`;
+      document.getElementById('rosterWeekLabel').textContent = 'This week';
       document.getElementById('rosterOverlayWeekLabel').textContent = label;
+
+      const prevBtn = document.getElementById('rosterWeekPrevBtn');
+      const nextBtn = document.getElementById('rosterWeekNextBtn');
+      if (prevBtn) prevBtn.disabled = currentWeekOffset <= -ROSTER_WEEKS_BACK;
+      if (nextBtn) nextBtn.disabled = currentWeekOffset >= ROSTER_WEEKS_FORWARD;
+
+      const banner = document.getElementById('rosterReadonlyBanner');
+      if (banner) banner.style.display = isPastWeek() ? 'flex' : 'none';
+
+      // Generate/Clear only make sense for a week that can still be edited.
+      const generateBtn = document.getElementById('rosterGenerateBtn');
+      const clearBtn = document.getElementById('rosterClearBtn');
+      if (generateBtn) generateBtn.disabled = isPastWeek() || !isOwner();
+      if (clearBtn) clearBtn.disabled = isPastWeek() || !isOwner();
     }
 
     // ---- Legend ----
@@ -615,14 +674,15 @@ FarmSmart.registerTile({
     }
 
     function renderGrid() {
-      // Overlay grid: interactive (Owner only — buildGridHtml already
-      // disables buttons for Greg via the isOwner() check inside it).
+      // Overlay grid: interactive (Owner only, and only for the
+      // current/a future week — buildGridHtml already disables
+      // buttons for Greg or a past week via the checks inside it).
       const overlayEl = document.getElementById('rosterGridEl');
       if (overlayEl) {
-        overlayEl.innerHTML = buildGridHtml(false);
+        overlayEl.innerHTML = buildGridHtml(isPastWeek());
         overlayEl.querySelectorAll('.roster-cell-btn').forEach((btn) => {
           btn.addEventListener('click', () => {
-            if (!isOwner()) return;
+            if (!isOwner() || isPastWeek()) return;
             openCellSheet(btn.dataset.emp, parseInt(btn.dataset.day, 10));
           });
         });
@@ -862,11 +922,28 @@ FarmSmart.registerTile({
     function closeStaffingSheet() { document.getElementById('rosterStaffingSheetMask').classList.remove('show'); }
 
     // ---- Main overlay open/close + owner-only controls ----
+    function goToWeek(newOffset) {
+      newOffset = Math.max(-ROSTER_WEEKS_BACK, Math.min(ROSTER_WEEKS_FORWARD, newOffset));
+      if (newOffset === currentWeekOffset) return;
+      saveGridToStorage(); // persist whatever's on screen for the week we're leaving
+      currentWeekOffset = newOffset;
+      rosterGrid = {};
+      rosterEmployees.forEach((e) => ensureGridRow(e.id));
+      loadGridFromStorage();
+      renderAll();
+    }
+
     function openRosterOverlay() {
       renderAll();
       document.getElementById('rosterOverlay').classList.add('show');
     }
-    function closeRosterOverlay() { document.getElementById('rosterOverlay').classList.remove('show'); }
+    function closeRosterOverlay() {
+      document.getElementById('rosterOverlay').classList.remove('show');
+      // Always leave the overlay parked on "this week" — that's what
+      // the dashboard card's live preview should always reflect,
+      // regardless of which week was last being browsed.
+      if (currentWeekOffset !== 0) goToWeek(0);
+    }
 
     function applyRolePermissions() {
       document.getElementById('rosterOwnerActions').style.display = isOwner() ? 'flex' : 'none';
@@ -874,6 +951,8 @@ FarmSmart.registerTile({
     }
 
     document.getElementById('rosterOpenBtn').addEventListener('click', openRosterOverlay);
+    document.getElementById('rosterWeekPrevBtn').addEventListener('click', () => goToWeek(currentWeekOffset - 1));
+    document.getElementById('rosterWeekNextBtn').addEventListener('click', () => goToWeek(currentWeekOffset + 1));
 
     // Back arrows for the 4 sheets, plus tap-outside-the-sheet to close.
     document.getElementById('rosterCellSheetBackBtn').addEventListener('click', closeCellSheet);
@@ -1047,12 +1126,14 @@ FarmSmart.registerTile({
     });
 
     document.getElementById('rosterGenerateBtn').addEventListener('click', () => {
+      if (isPastWeek() || !isOwner()) return;
       generateRoster();
       saveGridToStorage();
       renderGrid();
       showToast('Roster generated');
     });
     document.getElementById('rosterClearBtn').addEventListener('click', () => {
+      if (isPastWeek() || !isOwner()) return;
       openConfirm('Clear roster?', 'This clears every cell in this week\'s roster.', 'Clear', () => {
         rosterEmployees.forEach((e) => { rosterGrid[e.id] = Array(7).fill(null); });
         saveGridToStorage();
