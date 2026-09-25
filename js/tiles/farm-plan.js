@@ -159,7 +159,7 @@
       <div class="fp-src" id="fp-src" hidden>
         <div class="fp-seg2" role="radiogroup" aria-label="Satellite image">
           <button type="button" role="radio" data-src="esri" aria-checked="false">Detailed</button>
-          <button type="button" role="radio" data-src="s2" aria-checked="true">Recent (less detailed)</button>
+          <button type="button" role="radio" data-src="s2" aria-checked="true">Recent</button>
         </div>
         <div class="fp-s2" id="fp-s2" hidden>
           <p class="fp-s2-note" id="fp-s2-note"></p>
@@ -168,13 +168,26 @@
       <p class="fp-imgdate" id="fp-imgdate" hidden></p>
       <div class="fp-legend" id="fp-legend" aria-label="Paddock status"></div>
 
-      <!-- Set-up section: open while the plan isn't aligned yet, folded after. -->
-      <div class="fp-calib" id="fp-calib">
-        <details class="fp-calib-details" id="fp-calib-details">
+      <!-- Paddock list: visible by default, replaces "Satellite alignment"
+           as the everyday view once the plan is set up. -->
+      <div class="fp-pdk-section" id="fp-pdk-section" hidden>
+        <p class="fp-pdk-section-title">Paddocks</p>
+        <ul class="fp-ref-list" id="fp-pdk-list" aria-label="Paddocks"></ul>
+      </div>
+
+      <button type="button" class="fp-calib-toggle" id="fp-calib-toggle">
+        <span id="fp-calib-toggle-label">Satellite alignment</span>
+        <i class="ti ti-chevron-down fp-calib-chev" aria-hidden="true"></i>
+      </button>
+
+      <!-- Set-up section: open while the plan isn't aligned yet (can't be
+           hidden then — it's needed to finish set-up), fully hidden after
+           unless opened via the toggle button above. -->
+      <div class="fp-calib" id="fp-calib" hidden>
+        <details class="fp-calib-details" id="fp-calib-details" open>
           <summary class="fp-calib-head">
             <span class="fp-calib-title">Satellite alignment</span>
             <span class="badge info" id="fp-calib-badge"></span>
-            <i class="ti ti-chevron-down fp-calib-chev" aria-hidden="true"></i>
           </summary>
           <div class="fp-calib-body">
             <div class="fp-kind fp-kind-ref">
@@ -183,7 +196,8 @@
             </div>
             <div id="fp-calib-msgs"></div>
             <ul class="fp-ref-list" id="fp-ref-list" aria-label="Reference points"></ul>
-            <button type="button" class="card-btn" id="fp-replace-btn"><i class="ti ti-photo"></i>Replace plan photo</button>
+            <!-- Hidden for now — will move into a proper "Advanced settings" area later. -->
+            <button type="button" class="card-btn" id="fp-replace-btn" hidden><i class="ti ti-photo"></i>Replace plan photo</button>
           </div>
         </details>
       </div>
@@ -221,6 +235,7 @@
     showPaddocks: true,
     showRefs: true,
     calibOpen: null,   // "Satellite alignment": null = automatic (open until aligned), else user's choice
+    calibSectionOpen: null, // whole "Satellite alignment" section: null = automatic (visible until aligned, hidden after), else user's toggle choice
     source: 's2',      // 'esri' (detailed, older) | 's2' (recent, less detailed) — recent is the default
     s2Date: '',        // YYYY-MM-DD pass shown
     s2Passes: null,    // [{ date, cloud }] for the current farm, null = not loaded
@@ -311,10 +326,11 @@
       const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
       if (p.source === 'esri' || p.source === 's2') state.source = p.source;
       state.calibOpen = typeof p.calibOpen === 'boolean' ? p.calibOpen : null;
+      state.calibSectionOpen = typeof p.calibSectionOpen === 'boolean' ? p.calibSectionOpen : null;
     } catch (_) { /* private mode etc.: keep defaults */ }
   }
   function savePrefs() {
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify({ paddocks: state.showPaddocks, refs: state.showRefs, source: state.source, calibOpen: state.calibOpen })); } catch (_) {}
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify({ paddocks: state.showPaddocks, refs: state.showRefs, source: state.source, calibOpen: state.calibOpen, calibSectionOpen: state.calibSectionOpen })); } catch (_) {}
   }
 
   /** Accepts "-38.3001", "−38.3001" and "-38,3001". Returns {empty} | {invalid} | {value}. */
@@ -689,6 +705,8 @@
       poCtl: q('fp-po-ctl'), poRange: q('fp-po-range'), poNote: q('fp-po-note'), imgDate: q('fp-imgdate'),
       calib: q('fp-calib'), calibDetails: q('fp-calib-details'), calibBadge: q('fp-calib-badge'),
       calibMsgs: q('fp-calib-msgs'), refList: q('fp-ref-list'), refLabel: q('fp-ref-label'),
+      pdkSection: q('fp-pdk-section'), pdkList: q('fp-pdk-list'),
+      calibToggle: q('fp-calib-toggle'), calibToggleLabel: q('fp-calib-toggle-label'),
       uploadBtn: q('fp-upload-btn'), replaceBtn: q('fp-replace-btn'),
       sheetMask: q('fp-sheet-mask'), sheetTitle: q('fp-sheet-title'),
       sheetBack: q('fp-sheet-back'), sheetBody: q('fp-sheet-body')
@@ -747,6 +765,15 @@
     els.calib.addEventListener('click', e => {
       const row = e.target.closest('[data-ref-id]');
       if (row) openEditor('ref', row.dataset.refId);
+    });
+    els.calibToggle.addEventListener('click', () => {
+      state.calibSectionOpen = !isCalibSectionOpen();
+      savePrefs();
+      renderCalibPanel();
+    });
+    els.pdkSection.addEventListener('click', e => {
+      const row = e.target.closest('[data-pdk-id]');
+      if (row) openEditor('paddock', row.dataset.pdkId);
     });
     els.banner.addEventListener('click', e => {
       if (e.target.closest('#fp-pick-cancel')) cancelPick(true);
@@ -1120,6 +1147,11 @@
   }
 
   const isCalibOpen = () => (state.calibOpen === null ? !isAligned() : state.calibOpen);
+  // Whole "Satellite alignment" section: shown automatically while set-up
+  // isn't finished yet (there'd be nothing else to reach it from), hidden
+  // by default once aligned — the paddock list takes its place — unless
+  // the user has explicitly toggled it open.
+  const isCalibSectionOpen = () => (state.calibSectionOpen === null ? !isAligned() : state.calibSectionOpen);
 
   function renderCalibPanel() {
     const c = state.calib, d = state.data;
@@ -1141,6 +1173,28 @@
     }).join('');
     els.refList.hidden = !d.refs.length;
     if (els.calibDetails.open !== isCalibOpen()) els.calibDetails.open = isCalibOpen();
+
+    // Whole-section visibility, driven by the toggle button above it.
+    els.calib.hidden = !isCalibSectionOpen();
+    els.calibToggle.classList.toggle('open', isCalibSectionOpen());
+    // Can't fully hide it while set-up isn't finished — nothing else
+    // could reach it, so the toggle itself is disabled in that case.
+    els.calibToggle.disabled = !isAligned();
+
+    renderPaddockList();
+  }
+
+  function renderPaddockList() {
+    const d = state.data;
+    els.pdkList.innerHTML = d.paddocks.map(p => {
+      const st = statusOf(p.status);
+      const days = daysSince(p.lastGrazed);
+      const sub = days === null ? st.label : `${st.label} · grazed ${days <= 0 ? 'today' : days + 'd ago'}`;
+      return `<li><button type="button" class="fp-ref-row" data-pdk-id="${esc(p.id)}" data-track="Open paddock (list)">` +
+        `<span class="row-line"><span class="k"><span class="fp-dot paddock" aria-hidden="true"></span>${esc(p.name)}</span>` +
+        `<span class="v">${esc(sub)}</span></span></button></li>`;
+    }).join('');
+    els.pdkSection.hidden = !d.paddocks.length;
   }
 
   const listFor = kind => (kind === 'ref' ? state.data.refs : state.data.paddocks);

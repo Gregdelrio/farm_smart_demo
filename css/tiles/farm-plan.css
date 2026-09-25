@@ -183,6 +183,20 @@
 .fp-calib-msg.warn { color: var(--color-red); }
 .fp-ref-list { list-style: none; margin: 0; padding: 0; }
 .fp-ref-list li:last-child .row-line { border-bottom: none; }
+
+.fp-pdk-section { margin: 0 0 1vh; }
+.fp-pdk-section-title { font-weight: 800; color: var(--text-primary); margin: 0 0 0.4vh; font-size: 0.95rem; }
+
+.fp-calib-toggle {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  margin: 0 0 1vh; padding: 0.6rem 0.2rem;
+  border: none; border-top: 1px solid var(--border-divider); background: transparent;
+  color: var(--text-secondary); font: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+}
+.fp-calib-toggle:disabled { opacity: 0.5; cursor: default; }
+.fp-calib-toggle .fp-calib-chev { transition: transform 0.2s ease; }
+.fp-calib-toggle.open .fp-calib-chev { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .fp-calib-toggle .fp-calib-chev { transition: none; } }
 .fp-ref-row {
   display: block;
   width: 100%;
@@ -412,8 +426,12 @@
    Full name + halo return automatically once zoomed back in close. */
 .fp-pd, .fp-pd-halo { transition: width 0.15s ease, height 0.15s ease, inset 0.15s ease, opacity 0.15s ease; }
 .fp-zoom-far .fp-pd-pill { display: none; }
-.fp-zoom-far .fp-pd { width: 16px; height: 16px; }
-.fp-zoom-far .fp-pd-halo { inset: 0; opacity: 1; box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, 0.5); }
+.fp-zoom-far .fp-pd-halo {
+  position: static;   /* was absolute+inset — that's what let the dot drift off its true anchor once .fp-pd's own box was untouched */
+  width: 14px; height: 14px;
+  opacity: 1;
+  box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, 0.5);
+}
 @media (prefers-reduced-motion: reduce) {
   .fp-pd-icon.fp-pending .fp-pd { animation: none; }
 }
