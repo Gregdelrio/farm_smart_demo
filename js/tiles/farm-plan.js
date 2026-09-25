@@ -960,7 +960,7 @@
       // whole plan if there are none yet), zoomed in close.
       const bounds = focusBounds(corners);
       const hasPaddocks = d.paddocks.length > 0;
-      const z = Math.min(map.getBoundsZoom(bounds, false, L.point(hasPaddocks ? 34 : 4, hasPaddocks ? 34 : 4)) - 1, 20);
+      const z = Math.min(map.getBoundsZoom(bounds, false, L.point(hasPaddocks ? 16 : 2, hasPaddocks ? 16 : 2)), 20);
       map.setView(bounds.getCenter(), z, { animate: false });
       state.pNeedsFit = false;
     }
@@ -1130,6 +1130,36 @@
     }
     if (satOp === 0) renderImageryInfo(null);
     else scheduleImageryInfo();
+  }
+
+  const LONG_PRESS_MS = 450;
+  const LONG_PRESS_MOVE_TOLERANCE = 8; // px — moving further than this before the hold completes cancels it (was a pan/scroll, not a hold)
+
+  /** Requires a held press (not a quick tap) before a marker can actually
+   *  be dragged — makes it hard to nudge a paddock by accident while
+   *  panning/tapping, without adding any extra step for the deliberate case. */
+  function attachLongPressDrag(marker) {
+    let timer = null, startPoint = null;
+    const cancel = () => { clearTimeout(timer); timer = null; };
+    marker.on('mousedown', e => {
+      startPoint = e.containerPoint;
+      timer = setTimeout(() => {
+        timer = null;
+        if (marker.dragging) marker.dragging.enable();
+        const el = marker.getElement();
+        if (el) el.classList.add('fp-armed');
+        if (navigator.vibrate) navigator.vibrate(15);
+      }, LONG_PRESS_MS);
+    });
+    marker.on('mousemove', e => {
+      if (timer && startPoint && e.containerPoint.distanceTo(startPoint) > LONG_PRESS_MOVE_TOLERANCE) cancel();
+    });
+    marker.on('mouseup', cancel);
+    marker.on('dragend', () => {
+      if (marker.dragging) marker.dragging.disable(); // re-lock: next move needs a fresh long press too
+      const el = marker.getElement();
+      if (el) el.classList.remove('fp-armed');
+    });
   }
 
   function pinHtml(kind, name, noGps) {
@@ -1669,11 +1699,12 @@
     if (state.showPaddocks) d.paddocks.forEach(p => {
       const m = L.marker(toLL(p.u, p.v), {
         icon: paddockIcon(p, false),
-        draggable: interactive, interactive, keyboard: interactive,
+        draggable: false, interactive, keyboard: interactive, // dragging only arms after a long press — see attachLongPressDrag
         title: `${p.name}: ${statusOf(p.status).label}`
       });
       m.on('click', () => { if (!state.pick && !state.editing) openEditor('paddock', p.id); });
       m.on('dragend', () => onMapDrag('paddock', p.id, m.getLatLng()));
+      if (interactive) attachLongPressDrag(m);
       m.addTo(layer);
     });
 
