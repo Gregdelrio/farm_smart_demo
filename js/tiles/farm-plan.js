@@ -1524,7 +1524,17 @@
     map.on('moveend', () => {
       if (state.map.hasLayer(state.tiles) && (state.tiles === state.esriLayer)) scheduleImageryInfo();
     });
+    map.on('zoomend', () => updatePaddockZoomClass(map));
+    updatePaddockZoomClass(map); // set the right size immediately for the opening view too
     state.map = map;
+  }
+
+  // Paddock pins are the big name+status pill at close zoom, but shrink to
+  // a plain colour dot once zoomed out far enough that a whole plan's worth
+  // of pills would just overlap into an unreadable mess.
+  const PADDOCK_PIN_SHRINK_ZOOM = 17;
+  function updatePaddockZoomClass(map) {
+    map.getContainer().classList.toggle('fp-zoom-far', map.getZoom() < PADDOCK_PIN_SHRINK_ZOOM);
   }
 
   function onMapClick(e) {

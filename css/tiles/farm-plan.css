@@ -390,6 +390,15 @@
 }
 .fp-pd-sub { font-size: 0.66rem; font-weight: 600; opacity: 0.9; }
 .fp-pd-icon.fp-pending .fp-pd { animation: fp-pulse 1.2s ease-in-out infinite; }
+
+/* Zoomed out (see PADDOCK_PIN_SHRINK_ZOOM in farm-plan.js): shrink each
+   paddock pin down to a plain colour dot — no name, no halo — so a whole
+   plan's worth of pins doesn't turn into an overlapping, unreadable mess.
+   Full name + halo return automatically once zoomed back in close. */
+.fp-pd, .fp-pd-halo { transition: width 0.15s ease, height 0.15s ease, inset 0.15s ease, opacity 0.15s ease; }
+.fp-zoom-far .fp-pd-pill { display: none; }
+.fp-zoom-far .fp-pd { width: 16px; height: 16px; }
+.fp-zoom-far .fp-pd-halo { inset: 0; opacity: 1; box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, 0.5); }
 @media (prefers-reduced-motion: reduce) {
   .fp-pd-icon.fp-pending .fp-pd { animation: none; }
 }
