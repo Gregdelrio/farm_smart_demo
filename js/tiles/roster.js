@@ -48,14 +48,19 @@ const ROSTER_DELETE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="cur
 // a couple: they always share the same off-days, and the generator
 // tries (best-effort, not a hard rule) to put them on the same farm
 // on days they both work.
-let rosterEmployees = [
-  { id: 'greg',      name: 'Greg',       trainedFarms: ['vickers'], partnerId: 'violette', consecutiveOffTarget: 2, companionTarget: 2 },
+// One-time seed only — copied into Supabase the very first time the
+// roster_employees table is empty (see loadEmployeesFromSupabase()).
+// Never read directly again after that: the database is the source of
+// truth from then on, editable via "Manage Employees" like before.
+const SEED_EMPLOYEES = [
+  { id: 'greg',      name: 'Greg',       trainedFarms: ['vickers'], partnerId: 'violette' },
   { id: 'violette',  name: 'Violette',   trainedFarms: ['maguires'],            partnerId: 'greg' },
   { id: 'lucia',     name: 'Lucia',      trainedFarms: ['vickers'],             partnerId: 'bart' },
   { id: 'bart',      name: 'Bart',       trainedFarms: ['vickers', 'maguires'], partnerId: 'lucia' },
   { id: 'elsep',     name: 'Else',       trainedFarms: ['vickers'],             partnerId: null },
   { id: 'carolinas', name: 'Carolina',   trainedFarms: ['laang'],               partnerId: null },
 ];
+let rosterEmployees = SEED_EMPLOYEES.map((e) => ({ ...e })); // populated for real by loadEmployeesFromSupabase() at init
 
 // rosterGrid[employeeId][dayIndex] = null (blank) | 'off' | a farm id
 let rosterGrid = {};
@@ -84,39 +89,83 @@ rosterEmployees.forEach((e) => ensureGridRow(e.id));
 // a blocked/unavailable localStorage never breaks the tile — it just
 // won't remember between visits on that device.
 // ---------------------------------------------------------------------
-const ROSTER_EMPLOYEES_STORAGE_KEY = 'farmsmart-roster-employees';
 const ROSTER_STAFFING_STORAGE_KEY = 'farmsmart-roster-staffing';
 
-// Bump this whenever the baseline `rosterEmployees` array above changes
-// in a way that should override what's already saved on a device
-// (reordering, renaming, adding/removing people) — otherwise a device
-// that already saved the OLD array would keep shadowing every such
-// update forever, since loadEmployeesFromStorage below always prefers
-// whatever's saved. Editable in-app changes (Manage Employees) still
-// persist normally between versions that don't bump this number.
-const ROSTER_EMPLOYEES_SCHEMA_VERSION = 2;
-const ROSTER_EMPLOYEES_VERSION_KEY = 'farmsmart-roster-employees-version';
-
-function saveEmployeesToStorage() {
-  try {
-    localStorage.setItem(ROSTER_EMPLOYEES_STORAGE_KEY, JSON.stringify(rosterEmployees));
-    localStorage.setItem(ROSTER_EMPLOYEES_VERSION_KEY, String(ROSTER_EMPLOYEES_SCHEMA_VERSION));
-  } catch (e) { /* storage unavailable — edits still work this session */ }
+// Same Supabase project as Farm Plan — one project for the whole app.
+const SUPABASE_URL = 'https://gissuvlnkztpbvghymmz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdpc3N1dmxua3p0cGJ2Z2h5bW16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTUxMTAsImV4cCI6MjEwNTg3MTExMH0.iPshYfbWiiFNGjGQVKNxy55M5kbBci3Ti--4xbUOVM0';
+let rosterSupabaseClient = null;
+function rosterSb() {
+  if (rosterSupabaseClient) return rosterSupabaseClient;
+  if (typeof window.supabase === 'undefined') throw new Error('supabase-js not loaded — check the <script> tag in index.html');
+  rosterSupabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return rosterSupabaseClient;
 }
-function loadEmployeesFromStorage() {
-  try {
-    const savedVersion = parseInt(localStorage.getItem(ROSTER_EMPLOYEES_VERSION_KEY) || '0', 10);
-    if (savedVersion < ROSTER_EMPLOYEES_SCHEMA_VERSION) return; // stale baseline — keep the fresh defaults above
 
-    const raw = localStorage.getItem(ROSTER_EMPLOYEES_STORAGE_KEY);
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    if (Array.isArray(saved) && saved.length > 0) {
-      rosterEmployees = saved;
-      rosterGrid = {};
-      rosterEmployees.forEach((e) => ensureGridRow(e.id));
-    }
-  } catch (e) { /* ignore corrupt/unavailable storage, fall back to the demo baseline */ }
+// Employees are no longer hardcoded — this loads them from Supabase,
+// shared across every device. The very first time the table is empty
+// (brand new Supabase project), it's seeded from SEED_EMPLOYEES once.
+async function loadEmployeesFromSupabase() {
+  const client = rosterSb();
+  const { data, error } = await client.from('roster_employees').select('*').order('sort_order', { ascending: true });
+  if (error) throw error;
+
+  // No auto-seeding — an empty table just means an empty roster until
+  // someone adds employees via "Manage Employees" (or directly in
+  // Supabase). SEED_EMPLOYEES below is unused now, kept only as a
+  // reference for the shape a row should have.
+  rosterEmployees = (data || []).map(rowToEmployee);
+  rosterGrid = {};
+  rosterEmployees.forEach((e) => ensureGridRow(e.id));
+}
+
+// Full-replace sync: simplest correct approach at this small scale —
+// delete every row and re-insert the current in-memory list, with
+// sort_order matching its array order (order matters for the roster
+// generation algorithm, e.g. Greg+Violette need to be processed a
+// particular way — see generateRoster()).
+async function saveEmployeesToSupabase() {
+  const client = rosterSb();
+  const { error: delErr } = await client.from('roster_employees').delete().neq('id', '__none__');
+  if (delErr) throw delErr;
+  if (rosterEmployees.length) {
+    const rows = rosterEmployees.map((e, i) => employeeToRow(e, i));
+    const { error: insErr } = await client.from('roster_employees').insert(rows);
+    if (insErr) throw insErr;
+  }
+}
+
+function employeeToRow(e, sortOrder) {
+  return {
+    id: e.id, preferred_name: e.name,
+    trained_farms: e.trainedFarms, partner_id: e.partnerId || null,
+    company: e.company || null,
+    employment_type: e.employmentType || null, hourly_rate: e.hourlyRate || null, classification: e.classification || null,
+    xero_employee_id: e.xeroEmployeeId || null,
+    app_role: e.appRole || null,
+    sort_order: sortOrder,
+  };
+}
+function rowToEmployee(r) {
+  // `name` (what the rest of the app displays and matches on) is the preferred name.
+  const e = { id: r.id, name: r.preferred_name || r.id, trainedFarms: r.trained_farms || [], partnerId: r.partner_id || null };
+  if (r.company) e.company = r.company;
+  if (r.employment_type) e.employmentType = r.employment_type;
+  if (r.hourly_rate) e.hourlyRate = r.hourly_rate;
+  if (r.classification) e.classification = r.classification;
+  if (r.xero_employee_id) e.xeroEmployeeId = r.xero_employee_id;
+  if (r.app_role) e.appRole = r.app_role;
+  return e;
+}
+
+// Fire-and-forget wrapper used at every edit point below — keeps the
+// existing call sites unchanged in spirit (instant local update, sync
+// happens in the background) while surfacing a toast if it fails.
+function saveEmployeesToStorage() {
+  saveEmployeesToSupabase().catch((err) => {
+    console.error('[roster] failed to save employees:', err);
+    showToast('Could not save — check your connection');
+  });
 }
 
 function saveStaffingToStorage() {
@@ -179,7 +228,9 @@ function loadGridFromStorage() {
 // Load any saved data immediately, so it's already in place before
 // the tile even mounts. Grid loads LAST, after employees — so it only
 // ever restores rows for employees who are actually still around.
-loadEmployeesFromStorage();
+// Employees load asynchronously from Supabase inside init() below —
+// there's no synchronous top-level load anymore (there can't be, a
+// database fetch always takes at least one tick).
 loadStaffingFromStorage();
 loadGridFromStorage();
 
@@ -253,9 +304,7 @@ function generateRoster() {
   // Built around exactly these 3 rules:
   //   1. Every employee gets exactly WEEKLY_DAYS_OFF (2) days off/week.
   //   2. Each couple (anyone with a partnerId) shares at least 1 of
-  //      those days off. A couple can additionally be flagged with
-  //      `consecutiveOffTarget: N` on either member (see Greg below)
-  //      to require N CONSECUTIVE shared days instead of just 1.
+  //      those days off.
   //   3. Every farm's MINIMUM is respected every day — EXCEPT any farm
   //      flagged `exemptFromMinimumGuarantee: true` in
   //      ROSTER_FARM_CONFIG (Laang, since Carolina is solo there and
@@ -267,11 +316,7 @@ function generateRoster() {
   // `ROSTER_FARM_CONFIG` (min/ideal/max) — so editing an employee's
   // trained farms, changing Farm Staffing numbers, or adding a
   // brand-new employee in "Manage Employees" all take effect on the
-  // next Generate, with no code change needed. The one named exception
-  // is Greg's `consecutiveOffTarget: 2` flag on his employee record —
-  // that's a deliberate business choice for that specific couple, not
-  // a limitation; a future couple could get the same treatment by
-  // adding the same field to their record.
+  // next Generate, with no code change needed.
   //
   // Only cells still blank (null) are ever touched — anything already
   // set by hand (tap a cell before generating) is left alone.
@@ -301,25 +346,6 @@ function generateRoster() {
     return shuffle(candidateDays.filter((d) => offCountForDay(d) === minLoad))[0];
   }
 
-  // Finds the best N-day CONSECUTIVE window that's still blank for
-  // BOTH members of a group. Only used for couples with a
-  // consecutiveOffTarget (see below).
-  function pickLeastLoadedConsecutiveBlock(group, length) {
-    let bestLoad = Infinity;
-    let bestStarts = [];
-    for (let start = 0; start <= 7 - length; start++) {
-      const days = Array.from({ length }, (_, i) => start + i);
-      const allBlank = days.every((d) => group.every((g) => rosterGrid[g.id][d] === null));
-      if (!allBlank) continue;
-      const load = days.reduce((sum, d) => sum + offCountForDay(d), 0);
-      if (load < bestLoad) { bestLoad = load; bestStarts = [start]; }
-      else if (load === bestLoad) { bestStarts.push(start); }
-    }
-    if (bestStarts.length === 0) return null;
-    const start = shuffle(bestStarts)[0];
-    return Array.from({ length }, (_, i) => start + i);
-  }
-
   const processed = new Set();
 
   rosterEmployees.forEach((e) => {
@@ -329,31 +355,17 @@ function generateRoster() {
     group.forEach((g) => processed.add(g.id));
 
     if (group.length > 1) {
-      const consecutiveTarget = Math.max(0, ...group.map((g) => g.consecutiveOffTarget || 0));
-      const hasPreset = group.some((g) => rosterGrid[g.id].some((v) => v === 'off'));
-
-      if (consecutiveTarget > 1 && !hasPreset) {
-        // e.g. Greg+Violette: fully synced N-consecutive-day block,
-        // auto-picked fresh — only when NEITHER has any preset yet,
-        // so a manually-set day off (tapped before Generate) is never
-        // padded with extra days on top of it.
-        const block = pickLeastLoadedConsecutiveBlock(group, Math.min(consecutiveTarget, WEEKLY_DAYS_OFF));
-        if (block) block.forEach((d) => group.forEach((g) => { rosterGrid[g.id][d] = 'off'; }));
-      } else {
-        // Regular couples (or a consecutive-target couple with a
-        // preset already in place): guarantee at least 1 shared day
-        // off, but only if both members still have room in their
-        // quota, so a manual preset that already maxed someone out is
-        // never exceeded.
-        const hasSharedOff = Array.from({ length: 7 }, (_, d) => d).some((d) => group.every((g) => rosterGrid[g.id][d] === 'off'));
-        const allHaveRoom = group.every((g) => rosterGrid[g.id].filter((v) => v === 'off').length < WEEKLY_DAYS_OFF);
-        if (!hasSharedOff && allHaveRoom) {
-          let candidates = [];
-          for (let d = 0; d < 7; d++) if (group.every((g) => rosterGrid[g.id][d] === null)) candidates.push(d);
-          if (candidates.length > 0) {
-            const sharedDay = pickLeastLoadedDay(candidates);
-            group.forEach((g) => { rosterGrid[g.id][sharedDay] = 'off'; });
-          }
+      // Guarantee at least 1 shared day off, but only if both members
+      // still have room in their quota, so a manual preset that
+      // already maxed someone out is never exceeded.
+      const hasSharedOff = Array.from({ length: 7 }, (_, d) => d).some((d) => group.every((g) => rosterGrid[g.id][d] === 'off'));
+      const allHaveRoom = group.every((g) => rosterGrid[g.id].filter((v) => v === 'off').length < WEEKLY_DAYS_OFF);
+      if (!hasSharedOff && allHaveRoom) {
+        let candidates = [];
+        for (let d = 0; d < 7; d++) if (group.every((g) => rosterGrid[g.id][d] === null)) candidates.push(d);
+        if (candidates.length > 0) {
+          const sharedDay = pickLeastLoadedDay(candidates);
+          group.forEach((g) => { rosterGrid[g.id][sharedDay] = 'off'; });
         }
       }
     }
@@ -422,35 +434,6 @@ function generateRoster() {
     // trained farms at all — a data-entry edge case) gets the day off.
     rosterEmployees.forEach((e) => {
       if (rosterGrid[e.id][d] === null) rosterGrid[e.id][d] = 'off';
-    });
-
-    // ---- Soft "companion" preference (best-effort, never at the
-    // expense of anyone's day off or another farm's minimum) ----
-    // An employee flagged `companionTarget: N` prefers having N other
-    // people on their farm when they're working — e.g. Greg (Vickers
-    // only) prefers 2 others with him. This is purely a nice-to-have:
-    // it only pulls in someone ALREADY working elsewhere that day (a
-    // day off is never touched), and only if their current farm can
-    // still spare them without dropping below its own minimum.
-    rosterEmployees.forEach((e) => {
-      if (!e.companionTarget) return;
-      const farmId = rosterGrid[e.id][d];
-      if (!farmId || farmId === 'off') return;
-      const cfg = ROSTER_FARM_CONFIG[farmId];
-      const desiredTotal = Math.min(cfg.max, 1 + e.companionTarget);
-
-      while (farmCount(farmId) < desiredTotal) {
-        const candidates = rosterEmployees.filter((other) => {
-          if (other.id === e.id) return false;
-          const otherFarm = rosterGrid[other.id][d];
-          if (!otherFarm || otherFarm === 'off' || otherFarm === farmId) return false; // never touch a day off
-          if (preExisting[other.id][d] !== null) return false; // never move a cell that was set before this generation (manual or otherwise)
-          if (!other.trainedFarms.includes(farmId)) return false;
-          return farmCount(otherFarm) - 1 >= ROSTER_FARM_CONFIG[otherFarm].min;
-        });
-        if (candidates.length === 0) break;
-        rosterGrid[candidates[0].id][d] = farmId;
-      }
     });
 
     // ---- Safety net (rule 3, hard guarantee) ----
@@ -570,8 +553,32 @@ FarmSmart.registerTile({
           <h2 id="rosterEmployeeFormTitle">Add Employee</h2>
         </div>
 
-        <p class="roster-form-label">Name</p>
-        <input type="text" class="roster-text-input" id="rosterEmployeeNameInput" placeholder="Employee name">
+        <p class="roster-form-label">Preferred name (shown everywhere in the app)</p>
+        <input type="text" class="roster-text-input" id="rosterEmployeeNameInput" placeholder="e.g. Greg">
+
+        <p class="roster-form-label">Company</p>
+        <input type="text" class="roster-text-input" id="rosterEmployeeCompanyInput" placeholder="e.g. Moloney Sharefarming Trust">
+
+        <p class="roster-form-label">Award status</p>
+        <div class="roster-chip-row" id="rosterEmployeeEmploymentChips">
+          <button type="button" class="roster-chip" data-emptype="casual">Casual</button>
+          <button type="button" class="roster-chip" data-emptype="permanent">Permanent</button>
+        </div>
+        <div id="rosterEmployeeRateRow" hidden>
+          <p class="roster-form-label">Hourly rate ($)</p>
+          <input type="number" step="0.01" min="0" class="roster-text-input" id="rosterEmployeeRateInput" placeholder="e.g. 28.50">
+        </div>
+        <div id="rosterEmployeeClassRow" hidden>
+          <p class="roster-form-label">Classification (dairy)</p>
+          <div class="roster-chip-row" id="rosterEmployeeClassChips">
+            <button type="button" class="roster-chip" data-class="FLH1">FLH1</button>
+            <button type="button" class="roster-chip" data-class="FLH2">FLH2</button>
+            <button type="button" class="roster-chip" data-class="FLH3">FLH3</button>
+            <button type="button" class="roster-chip" data-class="FLH5">FLH5</button>
+            <button type="button" class="roster-chip" data-class="FLH7">FLH7</button>
+            <button type="button" class="roster-chip" data-class="FLH8">FLH8</button>
+          </div>
+        </div>
 
         <p class="roster-form-label">Trained farms</p>
         <div class="roster-chip-row" id="rosterEmployeeFarmChips"></div>
@@ -602,6 +609,8 @@ FarmSmart.registerTile({
     let editingEmployeeId = null; // null = "add" mode, otherwise "edit" mode
     let editingFarms = [];
     let editingPartnerId = null;
+    let editingEmploymentType = null; // 'casual' | 'permanent' | null (not set)
+    let editingClassification = null; // 'FLH1'..'FLH8' — only relevant when casual
     let cellSheetTarget = null; // { empId, dayIndex }
 
     function isOwner() { return FarmSmart.currentUser.role === 'Owner'; }
@@ -809,6 +818,41 @@ FarmSmart.registerTile({
       editingPartnerId = emp ? emp.partnerId : null;
 
       document.getElementById('rosterEmployeeFormTitle').textContent = emp ? 'Edit Employee' : 'Add Employee';
+      document.getElementById('rosterEmployeeCompanyInput').value = emp ? (emp.company || '') : '';
+
+      editingEmploymentType = emp ? (emp.employmentType || null) : null;
+      editingClassification = emp ? (emp.classification || null) : null;
+      document.getElementById('rosterEmployeeRateInput').value = emp ? (emp.hourlyRate || '') : '';
+      const empChipsEl = document.getElementById('rosterEmployeeEmploymentChips');
+      const rateRowEl = document.getElementById('rosterEmployeeRateRow');
+      const classRowEl = document.getElementById('rosterEmployeeClassRow');
+      const classChipsEl = document.getElementById('rosterEmployeeClassChips');
+      function renderEmploymentChips() {
+        empChipsEl.querySelectorAll('.roster-chip').forEach((chip) => {
+          chip.classList.toggle('active', chip.dataset.emptype === editingEmploymentType);
+        });
+        rateRowEl.hidden = editingEmploymentType !== 'permanent';
+        classRowEl.hidden = editingEmploymentType !== 'casual';
+      }
+      function renderClassChips() {
+        classChipsEl.querySelectorAll('.roster-chip').forEach((chip) => {
+          chip.classList.toggle('active', chip.dataset.class === editingClassification);
+        });
+      }
+      renderEmploymentChips();
+      renderClassChips();
+      empChipsEl.querySelectorAll('.roster-chip').forEach((chip) => {
+        chip.onclick = () => {
+          editingEmploymentType = editingEmploymentType === chip.dataset.emptype ? null : chip.dataset.emptype;
+          renderEmploymentChips();
+        };
+      });
+      classChipsEl.querySelectorAll('.roster-chip').forEach((chip) => {
+        chip.onclick = () => {
+          editingClassification = editingClassification === chip.dataset.class ? null : chip.dataset.class;
+          renderClassChips();
+        };
+      });
       document.getElementById('rosterEmployeeNameInput').value = emp ? emp.name : '';
 
       const chipsEl = document.getElementById('rosterEmployeeFarmChips');
@@ -855,10 +899,20 @@ FarmSmart.registerTile({
     document.getElementById('rosterEmployeeSaveBtn').addEventListener('click', () => {
       const name = document.getElementById('rosterEmployeeNameInput').value.trim();
       if (!name) { showToast('Enter a name first'); return; }
+      const company = document.getElementById('rosterEmployeeCompanyInput').value.trim();
+      const rateRaw = document.getElementById('rosterEmployeeRateInput').value;
+      // Casual runs on the flat award rate (not stored per-employee) —
+      // an hourly rate only means something for a Permanent employee.
+      const hourlyRate = editingEmploymentType === 'permanent' && rateRaw ? Number(rateRaw) : undefined;
+      const classification = editingEmploymentType === 'casual' ? (editingClassification || undefined) : undefined;
 
       if (editingEmployeeId) {
         const emp = rosterEmployees.find((e) => e.id === editingEmployeeId);
         emp.name = name;
+        emp.company = company || undefined;
+        emp.employmentType = editingEmploymentType || undefined;
+        emp.hourlyRate = hourlyRate;
+        emp.classification = classification;
         emp.trainedFarms = editingFarms.slice();
         // Clear the old partner's back-reference before setting the new one.
         rosterEmployees.forEach((e) => { if (e.partnerId === emp.id) e.partnerId = null; });
@@ -866,7 +920,11 @@ FarmSmart.registerTile({
         if (editingPartnerId) rosterEmployees.find((e) => e.id === editingPartnerId).partnerId = emp.id;
       } else {
         const id = slugify(name);
-        const newEmp = { id, name, trainedFarms: editingFarms.slice(), partnerId: editingPartnerId };
+        const newEmp = {
+          id, name, company: company || undefined,
+          employmentType: editingEmploymentType || undefined, hourlyRate, classification,
+          trainedFarms: editingFarms.slice(), partnerId: editingPartnerId,
+        };
         rosterEmployees.push(newEmp);
         ensureGridRow(id);
         if (editingPartnerId) rosterEmployees.find((e) => e.id === editingPartnerId).partnerId = id;
@@ -1158,5 +1216,17 @@ FarmSmart.registerTile({
     applyRolePermissions();
     renderLegend();
     renderWeekLabel();
+
+    // Employees come from Supabase now, not hardcoded — the card briefly
+    // shows the built-in defaults (SEED_EMPLOYEES) until this resolves,
+    // then re-renders with whatever's really in the database.
+    loadEmployeesFromSupabase().then(() => {
+      renderGrid();
+      renderEmployeesList();
+      renderLegend();
+    }).catch((err) => {
+      console.error('[roster] failed to load employees:', err);
+      showToast('Could not load employees — check your connection');
+    });
   },
 });
