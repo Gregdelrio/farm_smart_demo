@@ -301,15 +301,19 @@ function shuffle(arr) {
 
 function generateRoster() {
   // ======================================================================
-  // Built around exactly these 3 rules:
-  //   1. Every employee gets exactly WEEKLY_DAYS_OFF (2) days off/week.
+  // Built around exactly these 3 rules, in this priority order — 1 and
+  // 2 are absolute and NEVER broken to satisfy 3:
+  //   1. Every employee gets exactly WEEKLY_DAYS_OFF (2) days off/week,
+  //      always. Nothing below ever cancels a day off to cover a farm.
   //   2. Each couple (anyone with a partnerId) shares at least 1 of
   //      those days off.
-  //   3. Every farm's MINIMUM is respected every day — EXCEPT any farm
-  //      flagged `exemptFromMinimumGuarantee: true` in
-  //      ROSTER_FARM_CONFIG (Laang, since Carolina is solo there and
-  //      her mandatory days off are expected to leave it uncovered
-  //      sometimes).
+  //   3. Every farm's MINIMUM is a best-effort target, filled only from
+  //      people who are already working that day (step 2 below) — if
+  //      everyone trained for a farm happens to be off, it just runs
+  //      short that day. Farms flagged `exemptFromMinimumGuarantee: true`
+  //      in ROSTER_FARM_CONFIG (Laang, since Carolina is solo there)
+  //      are expected to run short often; any farm can now run short
+  //      occasionally too, e.g. with only 1-2 people trained for it.
   //
   // DATA-DRIVEN, not hardcoded by name: farm assignment (step 2) reads
   // each employee's live `trainedFarms` and each farm's live
@@ -321,14 +325,6 @@ function generateRoster() {
   // Only cells still blank (null) are ever touched — anything already
   // set by hand (tap a cell before generating) is left alone.
   // ======================================================================
-
-  // Snapshot exactly what was already in the grid BEFORE this
-  // generation touches anything — used below (companion-boost pass)
-  // to tell "manually pre-set before hitting Generate" apart from
-  // "this same generation just decided it a moment ago". Only the
-  // latter is ever allowed to be reshuffled.
-  const preExisting = {};
-  rosterEmployees.forEach((e) => { preExisting[e.id] = rosterGrid[e.id].slice(); });
 
   // ---- Step 1: off-days (rules 1 + 2) ----
   // Off-days are LOAD-BALANCED across the week (picking whichever
@@ -436,27 +432,20 @@ function generateRoster() {
       if (rosterGrid[e.id][d] === null) rosterGrid[e.id][d] = 'off';
     });
 
-    // ---- Safety net (rule 3, hard guarantee) ----
-    // Every non-exempt farm must NEVER fall below its minimum, even in
-    // the rare case where everyone trained for it happened to land on
-    // a day off. Pulls someone in on their day off as a last resort,
-    // preferring to break an individual's day off before a couple's
-    // shared one.
-    guaranteedFarms.forEach((farmId) => {
-      const cfg = ROSTER_FARM_CONFIG[farmId];
-      let count = farmCount(farmId);
-      while (count < cfg.min) {
-        let candidates = rosterEmployees.filter((e) => rosterGrid[e.id][d] === 'off' && preExisting[e.id][d] === null && e.trainedFarms.includes(farmId));
-        if (candidates.length === 0) break; // nobody trained for this farm is even off today — truly can't be helped
-        candidates.sort((a, b) => {
-          const aBreaksShared = a.partnerId && rosterGrid[a.partnerId][d] === 'off' ? 1 : 0;
-          const bBreaksShared = b.partnerId && rosterGrid[b.partnerId][d] === 'off' ? 1 : 0;
-          return aBreaksShared - bBreaksShared;
-        });
-        rosterGrid[candidates[0].id][d] = farmId;
-        count++;
-      }
-    });
+    // ---- Farm minimums are best-effort, NEVER at the cost of a day off ----
+    // Rule 1 (everyone gets their 2 days off/week) always wins over
+    // rule 3 (farm minimum). There used to be a "safety net" here that
+    // pulled someone in on their day off as a last resort when a farm
+    // fell short — that's exactly what caused a 2-person, 2-farm setup
+    // to work every single person 7 days a week, since neither could
+    // ever be "spared" to rest without leaving their own farm empty.
+    // So this pass no longer touches anyone who is off: if every
+    // employee trained for a non-exempt farm happens to be off the
+    // same day, that farm is simply understaffed that day — surfaced
+    // to the Owner via the "Farm Staffing" live check (see
+    // renderStaffingCheck below), not silently fixed by cancelling a
+    // day off. `guaranteedFarms` is kept only for that informational
+    // check and for the below-min urgency scoring above.
   }
 }
 
