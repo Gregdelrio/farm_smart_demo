@@ -145,6 +145,14 @@
 .roster-chip.active { border-color: transparent; color: #fff; }
 .roster-chip.active .roster-legend-swatch { opacity: 1; }
 
+/* "Try to fit at least 1 day off together" — the heart lights up red
+   when the couple day-off toggle is on, instead of relying on the
+   generic white-on-card `.active` look above (which barely reads on
+   a chip with no swatch/background of its own). */
+#rosterCoupleDayOffChip i { color: var(--text-muted); transition: color 0.15s; }
+#rosterCoupleDayOffChip.active { background: var(--color-red-bg); border-color: transparent; color: var(--color-red); }
+#rosterCoupleDayOffChip.active i { color: var(--color-red); }
+
 /* ---- Farm staffing steppers ---- */
 .roster-staffing-row { margin: 0 1.5rem 1.5rem; background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 16px; padding: 1.2rem; }
 .roster-staffing-row__title { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1rem; margin-bottom: 1rem; }

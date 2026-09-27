@@ -263,7 +263,19 @@ function saveSettingsToStorage() {
 // week-nav path got you there. A blank cell simply has no row; only
 // 'off' or a farm id are ever stored. Same full-replace pattern as
 // employees/farms, scoped to the 7 dates of whichever week is showing. ----
-function isoDate(d) { return d.toISOString().slice(0, 10); }
+// NOT d.toISOString().slice(0,10) — toISOString() converts to UTC
+// first, so local midnight on a day gets shifted back a day for
+// anyone ahead of UTC (e.g. Europe/Paris, UTC+2 in summer): local
+// Mon 00:00 CEST becomes Sun 22:00 UTC, so the ISO string reads
+// "Sunday" — exactly the "calendar says 21-27, database says 20-26"
+// bug. Building the string from local Y/M/D components instead keeps
+// it matching whatever the browser's calendar actually shows.
+function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 async function loadGridFromSupabase(offset) {
   const dates = weekDates(offset).map(isoDate);
