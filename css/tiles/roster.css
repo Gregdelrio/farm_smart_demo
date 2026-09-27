@@ -192,3 +192,11 @@
 .roster-legend--card .roster-legend-swatch { width: 11px; height: 11px; }
 
 .roster-preview-hint { font-size: 0.72rem; color: var(--text-muted); text-align: center; margin: 0 0 0.75rem; }
+
+/* ---- Add/Edit Farm form: color picker ---- */
+.roster-color-row { display: flex; flex-wrap: wrap; gap: 0.7rem; margin: 0 1.5rem 1.5rem; }
+.roster-color-swatch {
+  width: 2.3rem; height: 2.3rem; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 2px solid transparent;
+}
+.roster-color-swatch.active { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--bg-card); }
