@@ -2,44 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<!-- Locks pinch-zoom off so our large touch targets stay reliably large
-     on screen — important when the user is wearing gloves. -->
+<!-- No pinch-zoom: keeps the large touch targets usable with gloves on. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#1c1c1a">
 <title>FarmSmart</title>
 
-<!-- Favicon (browser tab icon) — favicon.ico covers older browsers,
-     the PNGs give modern browsers a sharper icon at the exact size
-     they need instead of scaling one image. -->
 <link rel="icon" href="icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
 
-<!-- "Add to Home Screen" icon on iOS (Safari doesn't read manifest.json
-     for this — it specifically needs this tag). -->
+<!-- iOS ignores manifest.json for the home-screen icon. -->
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
-<!-- PWA manifest — this is what Android/Chrome use for "Add to Home
-     Screen"/"Install app", pulling icons/icon-192.png and icon-512.png. -->
 <link rel="manifest" href="manifest.json">
 
-<!-- Icon font. This is a CDN link: the icon files themselves are NOT
-     part of this project, they're fetched from Cloudflare's public CDN
-     the first time the page loads. Every <i class="ti ti-xxx"></i> tag
-     anywhere in this app (including inside each tile's own template
-     string) renders using this file. -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<!-- Icon font for every <i class="ti ti-xxx">. Pinned so a new release
+     can't rename or drop an icon under us. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.48.0/dist/tabler-icons.min.css">
 
-<!-- Shared design system (header, card shell, sheets, dialogs, toast).
-     No tile-specific rules live here — see css/tiles/ below. -->
 <link rel="stylesheet" href="css/base.css">
 
-<!-- ================================================================
-     TILE STYLESHEETS
-     One <link> per tile. Comment out (or delete) a line to remove
-     that tile's visual styling — pair it with removing the matching
-     <script> tag near the bottom of this file.
-================================================================= -->
+<!-- One stylesheet per tile: disable a tile here AND at the bottom. -->
 <link rel="stylesheet" href="css/tiles/vat.css">
 <link rel="stylesheet" href="css/tiles/crossing.css">
 <link rel="stylesheet" href="css/tiles/milking.css">
@@ -48,22 +31,14 @@
 <link rel="stylesheet" href="css/tiles/roster.css">
 <link rel="stylesheet" href="css/tiles/timesheet.css">
 <!-- <link rel="stylesheet" href="css/tiles/shift-clock.css"> -->
-<!-- <link rel="stylesheet" href="css/tiles/daily-tasks.css"> -->
 <link rel="stylesheet" href="css/tiles/farm-plan.css">
 </head>
 <body>
 
-  <!-- Everything lives inside #appFrame — see the "0. APP FRAME" comment
-       at the top of css/base.css for why this wrapper exists (it's what
-       keeps the app phone-sized and centered on a desktop browser). -->
+  <!-- Keeps the app phone-sized and centred on desktop (see css/base.css). -->
   <div id="appFrame">
 
-  <!-- ============================================================
-       DEMO BANNER — shown once, above everything else, so people
-       don't hesitate to tap around. Dismissible; remembers the
-       dismissal via localStorage (see js/core.js §1b) so it doesn't
-       reappear on every visit once closed.
-  ============================================================ -->
+  <!-- Invites visitors to tap around; dismissal is remembered. -->
   <div class="demo-banner" id="demoBanner">
     <span class="demo-banner__text"><i class="ti ti-flask"></i>This is a demo — feel free to tap buttons and edit values, nothing will break.</span>
     <button class="demo-banner__close" id="demoBannerClose" aria-label="Dismiss">
@@ -71,13 +46,7 @@
     </button>
   </div>
 
-  <!-- ============================================================
-       HEADER
-       Row 1: brand mark
-       Row 2: farm picker (left) + theme toggle + user picker (right,
-              grouped together) — same row
-       Row 3: sync status pill
-  ============================================================ -->
+  <!-- Header: brand / farm picker + theme + user / sync status -->
   <div class="app-header">
     <div class="brand-row">
       <img class="brand-logo" src="icons/header-logo.png" alt="">
@@ -94,10 +63,8 @@
       </button>
 
       <div class="user-picker-group">
-        <!-- Dark/light mode toggle — sun/moon drawn as inline SVG
-             (not the icon font) so it always renders even if the
-             CDN icon font is slow/blocked. Persisted per-device via
-             localStorage, see js/core.js §6. -->
+        <!-- Inline SVG rather than the icon font, so it shows even if
+             the CDN is slow or blocked. -->
         <button class="theme-toggle" id="themeToggleBtn" aria-label="Switch to light mode">
           <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
           <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
@@ -121,31 +88,15 @@
 
   <p class="section-label">Dashboard</p>
 
-  <!-- ============================================================
-       DASHBOARD — intentionally EMPTY. Each tile injects its own
-       markup here at runtime (see js/core.js §7 mountTiles). The
-       order tiles appear on screen matches the order their <script>
-       tags are listed at the bottom of this file.
-  ============================================================ -->
+  <!-- Filled at runtime by each tile, in <script> order (js/core.js). -->
   <main id="dashboard"></main>
 
-  <!-- ============================================================
-       SHARE THE APP
-       Uses the native share sheet (Messages, WhatsApp, Messenger,
-       etc. — whatever the phone's OS offers) via the Web Share API,
-       falling back to "copy link" on browsers that don't support it
-       (most desktop browsers). See js/core.js §6 for the ntfy.sh
-       notification this also triggers.
-  ============================================================ -->
   <div class="share-row">
     <button class="card-btn primary" id="shareAppBtn" data-track="Share the app">
       <i class="ti ti-share-3"></i>Share the app
     </button>
   </div>
 
-  <!-- ============================================================
-       FARM SWITCHER SHEET
-  ============================================================ -->
   <div class="sheet-mask" id="farmSheetMask">
     <div class="sheet">
       <h2>Switch farm</h2>
@@ -153,11 +104,6 @@
     </div>
   </div>
 
-  <!-- ============================================================
-       USER SWITCHER SHEET
-       Both users currently see/do the same things — role-based
-       restriction isn't implemented yet (see js/core.js §3 TODO).
-  ============================================================ -->
   <div class="sheet-mask" id="userSheetMask">
     <div class="sheet">
       <h2>Switch user</h2>
@@ -165,9 +111,6 @@
     </div>
   </div>
 
-  <!-- ============================================================
-       GENERIC CONFIRMATION DIALOG (neutral, not red — see base.css)
-  ============================================================ -->
   <div class="confirm-mask" id="confirmMask">
     <div class="confirm-box">
       <h2 id="confirmTitle">Confirm?</h2>
@@ -183,17 +126,10 @@
 
   </div><!-- /#appFrame -->
 
-  <!-- ============================================================
-       SCRIPTS
-       Load order matters: core.js first (defines FarmSmart +
-       registerTile), then one <script> per tile. Each tile calls
-       registerTile() as soon as it loads; core.js then mounts all
-       of them, in this order, once the page is ready.
-
-       TO DISABLE A TILE: comment out (or delete) its <script> line
-       here AND its matching <link> line in <head> above. That's the
-       only file you need to touch.
-  ============================================================ -->
+  <!-- supabase-js and core.js first, then one script per tile, in display order.
+       To disable a tile, comment out its <script> here AND its <link>
+       in <head>. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
   <script src="js/core.js"></script>
   <script src="js/tiles/vat.js"></script>
   <script src="js/tiles/crossing.js"></script>
@@ -202,9 +138,7 @@
   <script src="js/tiles/gates.js"></script>
   <script src="js/tiles/timesheet.js"></script>
   <!-- <script src="js/tiles/shift-clock.js"></script> -->
-  <!-- <script src="js/tiles/daily-tasks.js"></script> -->
   <script src="js/tiles/roster.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
   <script src="js/tiles/farm-plan.js"></script>
 </body>
 </html>

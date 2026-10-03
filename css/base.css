@@ -1,22 +1,11 @@
 /* =====================================================================
    FARMSMART — BASE STYLESHEET
-   ---------------------------------------------------------------------
-   Shared design system only. NOTHING tile-specific lives in this file
-   — each tile has its own stylesheet in css/tiles/. That split is what
-   makes a tile removable: delete its <link> line in index.html and its
-   visuals disappear with it, without touching this file.
+   Shared design system only; each tile's styles live in css/tiles/.
 
-   THEMING: every color used for page background, card background, and
-   plain text goes through a CSS variable (defined below in "0. THEME
-   VARIABLES"), not a hardcoded hex value. Toggling `data-theme="light"`
-   on <html> (done by the button in the header, see js/core.js §6)
-   swaps every one of those variables at once — that's the entire
-   light/dark mode mechanism. The exception: solid, fully-saturated
-   colored blocks that are ALWAYS the same regardless of theme (the
-   milk vat's green/red frame, the road crossing button, badges) keep
-   their fixed hex values on purpose — they're deliberately high
-   contrast independent of the surrounding page, the same way a stop
-   sign is red on a sunny road AND a cloudy one.
+   THEMING: page, card and text colours are CSS variables, swapped all
+   at once by `data-theme="light"` on <html>. Saturated status blocks
+   (vat frame, crossing button, badges) keep fixed colours on purpose:
+   they must read the same in both themes.
 
    Sections:
      0. Theme variables (dark default + light override)
@@ -83,18 +72,9 @@
 
 /* ---------------------------------------------------------------------
    APP FRAME + RESPONSIVE LAYOUT
-   ---------------------------------------------------------------------
-   Most of this file uses "cqw" (container query width — % of the
-   nearest ANCESTOR that has `container-type` set) instead of "vw" (%
-   of the whole browser window). Three elements are containers:
-   #appFrame, .card, and .sheet / .confirm-box. That means anything
-   inside a .card sizes itself relative to THAT CARD's own width, not
-   the page's — so a card looks proportioned the same whether it's a
-   full-width phone column or one cell in the desktop grid below.
-
-   LAYOUT: on a phone, #appFrame is edge-to-edge, tiles stack in one
-   column. Above 760px wide: #appFrame grows up to 1100px, and the
-   dashboard switches to a 2-column grid (section 3b below).
+   Sizes use cqw (% of the nearest container: #appFrame, .card, .sheet,
+   .confirm-box) rather than vw, so a card keeps its proportions both as
+   a full-width phone column and as a cell of the desktop grid (3b).
 --------------------------------------------------------------------- */
 #appFrame {
   max-width: 1100px;
@@ -118,10 +98,8 @@ body { padding-bottom: 6vh; }
 
 /* ---------------------------------------------------------------------
    2. HEADER
-   Rows: brand + theme toggle — farm picker + user picker (same row) —
-   sync status pill. Fixed rem sizes throughout (not cqw) — the header
-   spans the FULL frame width, which gets much wider on desktop than a
-   phone screen, and header text shouldn't scale up with it.
+   Fixed rem sizes, not cqw: the header spans the whole frame, which is
+   much wider on desktop, and its text shouldn't grow with it.
 --------------------------------------------------------------------- */
 /* ---- Demo banner — shown once above everything else ---- */
 .demo-banner {
@@ -179,9 +157,7 @@ body { padding-bottom: 6vh; }
   color: var(--text-primary); cursor: pointer; flex-shrink: 0;
 }
 .theme-toggle svg { width: 1.15rem; height: 1.15rem; }
-/* Show the sun icon in dark mode (tap to switch TO light) and the
-   moon icon in light mode (tap to switch TO dark) — the icon always
-   represents the mode you're about to switch INTO. */
+/* The icon shows the mode a tap switches to. */
 .theme-toggle .icon-moon { display: none; }
 [data-theme="light"] .theme-toggle .icon-sun { display: none; }
 [data-theme="light"] .theme-toggle .icon-moon { display: block; }
@@ -224,9 +200,6 @@ body { padding-bottom: 6vh; }
 
 /* ---------------------------------------------------------------------
    3. SHARED CARD SHELL + BADGES
-   `container-type: inline-size` on .card is the key line for desktop:
-   it makes every cqw value INSIDE a tile size itself relative to that
-   card's own width — not the page's.
 --------------------------------------------------------------------- */
 .card {
   margin: 0 1.5rem 1.25rem; border-radius: 24px; padding: 3.5vh 5cqw;
@@ -246,8 +219,7 @@ body { padding-bottom: 6vh; }
 .badge.warn { background: var(--color-red-bg);   color: var(--color-red); }
 .badge.info { background: var(--color-blue-bg);  color: var(--color-blue); }
 
-/* Generic secondary button — any tile can use this class for a plain
-   full-width action ("View details", "Timings", etc). */
+/* Plain full-width action ("View details", "Timings"…). */
 .card-btn {
   width: 100%; margin-top: 2.5vh; background: var(--bg-card-alt);
   border: none; border-radius: 16px; color: var(--text-primary); font-size: 4cqw;
@@ -257,9 +229,7 @@ body { padding-bottom: 6vh; }
 .card-btn:active { transform: scale(0.98); }
 .card-btn.primary { background: var(--accent-yellow); color: #1c1c1a; }
 
-/* Share the app — sits below the dashboard, not inside any tile, so it
-   needs its own max-width/centering to match the rest of the app on
-   desktop (tiles get this for free from #dashboard's grid). */
+/* Outside #dashboard, so it needs its own width and centring. */
 .share-row {
   max-width: 640px;
   margin: 0 auto;
@@ -268,9 +238,7 @@ body { padding-bottom: 6vh; }
 .share-row .card-btn { margin-top: 0; }
 
 /* ---------------------------------------------------------------------
-   3b. RESPONSIVE DASHBOARD GRID
-   Below 760px: #dashboard is a normal block, tiles stack top to
-   bottom. At 760px+: tiles arrange into a 2-column grid instead.
+   3b. RESPONSIVE DASHBOARD GRID (2 columns from 760px)
 --------------------------------------------------------------------- */
 @media (min-width: 760px) {
   #dashboard {
@@ -283,19 +251,10 @@ body { padding-bottom: 6vh; }
   .card { margin: 0; } /* grid gap + container padding above replace the mobile side/bottom margins */
 }
 
-/* Full-screen detail overlay shell — any tile can reuse this for its
-   own "View details" drill-down.
-
-   `position: fixed` (relative to the browser VIEWPORT) rather than
-   `position: absolute` (relative to #appFrame's full document height)
-   is deliberate and important: #appFrame is usually much taller than
-   one screen (several tiles stacked), so `absolute; inset: 0` would
-   size this to the ENTIRE page height — meaning it could open mostly
-   below the user's current scroll position, invisible until they
-   scroll down to find it. `fixed` always covers exactly what's
-   currently on screen, so it's visible the instant it opens, no
-   matter how far down the page the user had scrolled. Same reasoning
-   applies to .sheet-mask, .confirm-mask, and .toast below. */
+/* Full-screen "View details" overlay. `fixed`, not `absolute`: the
+   page is taller than the screen, and an absolute overlay could open
+   out of view below the scroll position. Same for .sheet-mask,
+   .confirm-mask and .toast. */
 .overlay {
   position: fixed; inset: 0; background: var(--bg-page); z-index: 20;
   display: none; flex-direction: column; overflow-y: auto;
@@ -315,12 +274,11 @@ body { padding-bottom: 6vh; }
 .row-line .k { color: var(--text-secondary); font-weight: 600; }
 .row-line .v { color: var(--text-primary); font-weight: 700; }
 .row-line .v.ok { color: var(--color-green); }
+/* Bottom spacing for an overlay's last card. */
+.overlay-last-card { margin-bottom: 6vh; }
 
 /* ---------------------------------------------------------------------
-   4. BOTTOM SHEETS (farm switcher + user switcher)
-   Both reuse the exact same .sheet-row markup/styling for consistency.
-   See the `position: fixed` note above the .overlay rule — same fix,
-   same reason.
+   4. BOTTOM SHEETS
 --------------------------------------------------------------------- */
 .sheet-mask {
   position: fixed; inset: 0; background: var(--overlay-mask); z-index: 30;
@@ -355,10 +313,8 @@ body { padding-bottom: 6vh; }
 .sheet-row__meta { font-size: 3.3cqw; color: var(--text-muted); margin-top: 0.5vh; }
 
 /* ---------------------------------------------------------------------
-   5. CONFIRMATION DIALOG — NEUTRAL, NOT RED
-   This just double-checks an action before it runs. It is never itself
-   a warning, so it must never look like one — hence the yellow accent
-   below rather than the red used by tiles for genuine alert states.
+   5. CONFIRMATION DIALOG
+   Neutral yellow, never red: confirming an action isn't an alarm.
 --------------------------------------------------------------------- */
 .confirm-mask {
   position: fixed; inset: 0; background: var(--overlay-mask); z-index: 30;
@@ -367,7 +323,7 @@ body { padding-bottom: 6vh; }
 .confirm-mask.show { display: flex; }
 .confirm-box {
   width: 100%; max-width: 400px; background: var(--bg-surface-raised);
-  border: 1px solid var(--accent-yellow); /* neutral yellow accent, not red */
+  border: 1px solid var(--accent-yellow);
   border-radius: 20px; padding: 4vh 5cqw;
   container-type: inline-size;
 }
@@ -376,7 +332,7 @@ body { padding-bottom: 6vh; }
 .confirm-actions { display: flex; gap: 3cqw; margin-top: 3.5vh; }
 .confirm-actions button { flex: 1; min-height: 6.5vh; border-radius: 14px; border: none; font-size: 3.8cqw; font-weight: 700; cursor: pointer; }
 .confirm-actions .cancel { background: var(--bg-card-alt); color: var(--text-primary); }
-.confirm-actions .ok { background: var(--accent-yellow); color: #1c1c1a; } /* same neutral yellow — confirming isn't an alarm */
+.confirm-actions .ok { background: var(--accent-yellow); color: #1c1c1a; }
 
 /* ---------------------------------------------------------------------
    6. TOAST

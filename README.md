@@ -61,8 +61,9 @@ farmsmart/
 ## How the tile system works
 
 `#dashboard` in `index.html` starts **empty**. Each tile file (e.g.
-`js/tiles/vat.js`) calls `FarmSmart.registerTile({ id, html, init })`
+`js/tiles/vat.js`) calls `FarmSmart.registerTile({ id, name, html, init })`
 when it loads:
+- `name` — the tile's display name, used in the visit notifications.
 - `html` — the tile's complete `<div class="card">...</div>` markup
   (plus any detail overlay / sheet it needs), as a string.
 - `init` — a function that runs once that markup is in the page; this
@@ -102,13 +103,22 @@ position where you want it to appear.
 - `openConfirm(title, message, confirmLabel, onConfirm)` — the
   reusable confirmation dialog (see "The confirmation dialog is not
   red" below).
-- `FarmSmart.getActiveFarm()` — the full farm object currently
-  selected (`{ id, name, meta, herdSize, ownerFirstName, roadName }`).
+- `FarmSmart.getActiveFarm()` / `FarmSmart.getFarm(id)` — a farm
+  object (`{ id, name, meta, herdSize, roadName, lat, lng }`).
+- `FarmSmart.createPanel(panelId, backButtonId)` — open/close helper
+  for an overlay or bottom sheet.
+- `FarmSmart.supabase()` — the shared Supabase client.
+- `FarmSmart.storage` — localStorage `get`/`set`/`getJson`/`setJson`
+  that never throw.
+- `FarmSmart.escapeHtml(text)` — escape user-entered text before
+  putting it in `innerHTML`.
+- `FarmSmart.toDateKey(date)`, `FarmSmart.distanceKm(a, b)`,
+  `FarmSmart.icons.back` / `.close`.
 - `FarmSmart.currentUser` — the currently selected user
   (`{ id, name, role, initials }`).
 - `FarmSmart.randomSyncLabel()` — returns a "Synced X min ago" string
-  (X between 1–10), used by the Milk Vat, Live Milking, and Milk
-  Statement badges.
+  (X between 1–10); `FarmSmart.startSyncBadge(badgeId)` keeps a badge
+  refreshed with it.
 - `FarmSmart.createWheel(container, values, initialIndex)` — builds an
   iPhone-style scroll-and-snap picker column (see Paddock Gates below).
 - Two custom events any tile can listen for on `document`:
@@ -138,7 +148,7 @@ Three rows, top to bottom:
 
 ## Farms
 
-Three farms, defined in `js/core.js` §2 (`FARMS` array):
+Three farms, defined in `js/core.js` §3 (`FarmSmart.farms`):
 
 | Farm | Owner | Herd size | Road |
 |---|---|---|---|
@@ -146,19 +156,19 @@ Three farms, defined in `js/core.js` §2 (`FARMS` array):
 | Maguires Road Dairy | John | 557 cows | Maguires Road |
 | Vickers Road Panmure | Damian | 992 cows | Vickers Road |
 
-Add more by adding objects to the `FARMS` array (`id`, `name`, `meta`,
-`herdSize`, `ownerFirstName`, `roadName`) — the farm switcher sheet,
+Add more by adding objects to `FarmSmart.farms` (`id`, `name`, `meta`,
+`herdSize`, `roadName`, `lat`, `lng`) — the farm switcher sheet,
 Live Milking, Road Crossing, and Paddock Gates all read straight from
-it, and also need a matching entry in `PADDOCK_WHEEL_CONFIG` (see
+it, and also need a matching entry in `PADDOCK_WHEELS` (see
 Paddock Gates below) if the new farm should support gate scheduling.
 
 **Maguires Road Dairy is the default farm shown when the app first
-loads** (`FarmSmart.activeFarmId` in `js/core.js` §2) — change that
+loads** (`FarmSmart.activeFarmId` in `js/core.js` §3) — change that
 one line to make a different farm the default.
 
 ## Users & roles
 
-Two users, defined in `js/core.js` §3 (`USERS` array): **John
+Two users, defined in `js/core.js` §4 (`USERS` array): **John
 (Owner)** and **Greg (Employee)**. In the real (non-demo) version only
 one user will ever be signed in at a time — the switcher exists here
 purely so this can be demonstrated to the client without needing two
@@ -167,9 +177,9 @@ separate logins.
 **The one permission rule wired up so far:** Greg can't see the Milk
 Statement tile. Switching to Greg hides it completely (not greyed
 out — it's just not there); switching back to John brings it back,
-live, no reload needed. See `updateVisibilityForUser()` in
-`js/tiles/milk-statement.js` for how it works, and the comment above
-`USERS` in `js/core.js` §3 for how to add further role restrictions
+live, no reload needed. See `FarmSmart.restrictToOwner()` in
+`js/core.js` for how it works, and §4 of the same file for how to
+add further role restrictions
 later (either per-tile checks against `FarmSmart.currentUser.role`, or
 a `data-requires-role="owner"` attribute pattern).
 
@@ -241,7 +251,7 @@ Two separate, deliberately unlinked actions:
 
 - **"Timings"** schedules a *future* gate opening: a Today/Tomorrow
   toggle, then paddock wheel(s) (which differ per farm — see
-  `PADDOCK_WHEEL_CONFIG` and `composePaddockCode()` in
+  `PADDOCK_WHEELS` (wheels + `toCode` per farm) in
   `js/tiles/gates.js`), then an hour/minute/AM-PM time. "Save" adds it
   to that farm's schedule list. Max 4 scheduled at once — past that,
   "Timings" shows a toast instead of opening.
@@ -410,12 +420,12 @@ avoid any dependency on this — see "Back button icon" above.)
 
 Every time someone opens the app, and again when they leave (a summary
 of what they clicked), a push notification is sent to your phone via
-[ntfy.sh](https://ntfy.sh) — see `js/core.js` §6 for the full setup
+[ntfy.sh](https://ntfy.sh) — see `js/core.js` §8 for the full setup
 instructions in the code comment, but the short version:
 
 1. Install the **ntfy** app (iOS/Android).
 2. Pick a private topic name only you know, and set it as `NTFY_TOPIC`
-   at the top of `js/core.js` §6 (currently a placeholder —
+   in `js/core.js` §8 (currently a placeholder —
    **`'farmsmart-visits-CHANGE-ME'`, replace this before deploying**).
 3. Subscribe to that same topic name inside the ntfy app.
 

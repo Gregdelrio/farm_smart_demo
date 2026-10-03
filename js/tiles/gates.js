@@ -1,63 +1,14 @@
 /* =====================================================================
    TILE: PADDOCK GATES
-   ---------------------------------------------------------------------
-   TO DISABLE THIS TILE: comment out (or delete) in index.html:
-     <link rel="stylesheet" href="css/tiles/gates.css">
-     <script src="js/tiles/gates.js"></script>
-
-   DESIGN NOTES:
-   - Two separate actions, deliberately not linked to each other:
-       "Timings"  → schedule a FUTURE gate opening (added to the list
-                    below, up to 4 at a time, date + paddock + time).
-       "Open Now" → open a SPECIFIC paddock immediately. Does not
-                    touch the schedule list at all.
-   - The paddock wheel(s) shown depend on the active farm — see
-     PADDOCK_WHEEL_CONFIG and composePaddockCode() below.
-   - Both sheets are built fresh (wheels re-created) every time they
-     open, using FarmSmart.createWheel() from js/core.js §6, so they
-     always reflect whichever farm is currently active.
-   - The schedule is per farm (switching farms shows that farm's own
-     list) — kept in `scheduleByFarm` below. In a production build,
-     replace that in-memory object with a real API call.
+   Two deliberately unrelated actions:
+     "Timings"  schedules a future opening (up to 4, per farm);
+     "Open Now" opens a paddock immediately, leaving the schedule alone.
+   The paddock wheels depend on the active farm's naming scheme.
    ===================================================================== */
-
-// ---- Which paddock wheels each farm has, and how their values
-// combine into a single paddock code. ----
-const PADDOCK_WHEEL_CONFIG = {
-  vickers: [
-    { values: ['A', 'B', 'C', 'D'] },
-    { values: Array.from({ length: 20 }, (_, i) => String(i + 1)) }, // 1–20
-  ],
-  maguires: [
-    { values: ['-', 'W'] },
-    { values: Array.from({ length: 21 }, (_, i) => String(i + 10)) }, // 10–30
-  ],
-  laang: [
-    { values: Array.from({ length: 30 }, (_, i) => String(i + 1)) }, // 1–30
-  ],
-};
-
-function composePaddockCode(farmId, wheelValues) {
-  if (farmId === 'vickers') return wheelValues[0] + wheelValues[1];
-  if (farmId === 'maguires') return wheelValues[0] === '-' ? wheelValues[1] : wheelValues[0] + wheelValues[1];
-  if (farmId === 'laang') return wheelValues[0];
-  return wheelValues.join('');
-}
-
-const HOUR_VALUES = Array.from({ length: 12 }, (_, i) => String(i + 1));           // 1–12
-const MINUTE_VALUES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')); // 00–59
-const PERIOD_VALUES = ['AM', 'PM'];
-
-function to24HourMinutes(hour12, minute, period) {
-  let h = parseInt(hour12, 10) % 12;
-  if (period === 'PM') h += 12;
-  return h * 60 + parseInt(minute, 10);
-}
-
-const DELETE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
 FarmSmart.registerTile({
   id: 'gates',
+  name: 'Gates',
 
   html: `
     <div class="card">
@@ -80,13 +31,10 @@ FarmSmart.registerTile({
       </div>
     </div>
 
-    <!-- "Timings" sheet: date + paddock + time, adds to the schedule list -->
     <div class="sheet-mask" id="timingsSheetMask">
       <div class="sheet">
         <div class="sheet-header">
-          <button class="sheet-back-btn" id="timingsSheetBackBtn" aria-label="Back">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          </button>
+          <button class="sheet-back-btn" id="timingsSheetBackBtn" aria-label="Back">${FarmSmart.icons.back}</button>
           <h2>Schedule Gate</h2>
         </div>
 
@@ -114,13 +62,10 @@ FarmSmart.registerTile({
       </div>
     </div>
 
-    <!-- "Open Now" sheet: paddock only, no date/time — opens immediately -->
     <div class="sheet-mask" id="openNowSheetMask">
       <div class="sheet">
         <div class="sheet-header">
-          <button class="sheet-back-btn" id="openNowSheetBackBtn" aria-label="Back">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          </button>
+          <button class="sheet-back-btn" id="openNowSheetBackBtn" aria-label="Back">${FarmSmart.icons.back}</button>
           <h2>Open Paddock Now</h2>
         </div>
 
@@ -137,31 +82,51 @@ FarmSmart.registerTile({
   `,
 
   init: function () {
-    const MAX_SCHEDULED = 4;
+    const range = (length, start) => Array.from({ length }, (_, i) => String(i + start));
 
-    // Demo seed data — one entry per farm, so switching farms shows a
-    // different (plausible) schedule. Replace with a real API call in
-    // production; everything below just reads/writes this object.
-    const scheduleByFarm = {
-      vickers:  [{ code: 'A5',  date: 'Today',    time: '4:30 PM', sortMinutes: to24HourMinutes('4', '30', 'PM') }],
-      maguires: [{ code: 'W12', date: 'Today',    time: '6:00 AM', sortMinutes: to24HourMinutes('6', '00', 'AM') }],
-      laang:    [{ code: '12',  date: 'Tomorrow', time: '7:15 AM', sortMinutes: to24HourMinutes('7', '15', 'AM') }],
+    // Paddock wheels per farm, and how their values combine into a code.
+    const PADDOCK_WHEELS = {
+      vickers: { wheels: [['A', 'B', 'C', 'D'], range(20, 1)], toCode: ([letter, number]) => letter + number },
+      maguires: { wheels: [['-', 'W'], range(21, 10)], toCode: ([prefix, number]) => (prefix === '-' ? number : prefix + number) },
+      laang: { wheels: [range(30, 1)], toCode: ([number]) => number },
     };
 
-    let selectedDate = 'Today'; // Timings sheet state
-    let timingsPaddockWheelInstances = [];
-    let timingsTimeWheelInstances = [];
-    let openNowPaddockWheelInstances = [];
+    const HOUR_VALUES = range(12, 1);
+    const MINUTE_VALUES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+    const PERIOD_VALUES = ['AM', 'PM'];
+    const MAX_SCHEDULED_GATES = 4;
 
-    function currentSchedule() {
-      const farm = FarmSmart.getActiveFarm();
-      if (!scheduleByFarm[farm.id]) scheduleByFarm[farm.id] = [];
-      return scheduleByFarm[farm.id];
+    function to24HourMinutes(hour12, minute, period) {
+      let h = parseInt(hour12, 10) % 12;
+      if (period === 'PM') h += 12;
+      return h * 60 + parseInt(minute, 10);
     }
 
-    // Today sorts before Tomorrow; within the same day, earlier times first.
+    const scheduleEntry = (code, date, hour, minute, period) => ({
+      code, date, time: `${hour}:${minute} ${period}`, sortMinutes: to24HourMinutes(hour, minute, period),
+    });
+
+    // Demo data, one plausible schedule per farm. Replace with an API.
+    const scheduleByFarm = {
+      vickers: [scheduleEntry('A5', 'Today', '4', '30', 'PM')],
+      maguires: [scheduleEntry('W12', 'Today', '6', '00', 'AM')],
+      laang: [scheduleEntry('12', 'Tomorrow', '7', '15', 'AM')],
+    };
+
+    let selectedDate = 'Today';
+    let timingsPaddockWheels = [];
+    let timingsTimeWheels = [];
+    let openNowPaddockWheels = [];
+
+    function currentSchedule() {
+      const farmId = FarmSmart.activeFarmId;
+      if (!scheduleByFarm[farmId]) scheduleByFarm[farmId] = [];
+      return scheduleByFarm[farmId];
+    }
+
+    // Today before Tomorrow, then earliest first.
     function sortSchedule(list) {
-      const dateRank = (d) => (d === 'Today' ? 0 : 1);
+      const dateRank = (date) => (date === 'Today' ? 0 : 1);
       list.sort((a, b) => dateRank(a.date) - dateRank(b.date) || a.sortMinutes - b.sortMinutes);
     }
 
@@ -169,141 +134,102 @@ FarmSmart.registerTile({
       const list = currentSchedule();
       sortSchedule(list);
 
-      const nameEl = document.getElementById('gateNextName');
-      const timeEl = document.getElementById('gateNextTime');
-      const box = document.getElementById('gateNextBox');
+      const next = list[0];
+      document.getElementById('gateNextBox').classList.toggle('empty', !next);
+      document.getElementById('gateNextName').textContent = next ? next.code : 'No gates scheduled';
+      document.getElementById('gateNextTime').textContent = next ? `${next.date}, ${next.time}` : '';
+
+      // The other entries, each removable without confirmation (quick
+      // to fix a typo).
       const listEl = document.getElementById('gateList');
-
-      if (list.length === 0) {
-        box.classList.add('empty');
-        nameEl.textContent = 'No gates scheduled';
-        timeEl.textContent = '';
-      } else {
-        box.classList.remove('empty');
-        const next = list[0];
-        nameEl.textContent = next.code;
-        timeEl.textContent = `${next.date}, ${next.time}`;
-      }
-
-      // Remaining entries (up to 3 more, 4 total) as a short list, each
-      // deletable with its own small red X — no confirmation, matches
-      // what was asked for (quick to fix a typo).
       listEl.innerHTML = '';
       list.slice(1).forEach((entry) => {
         const row = document.createElement('div');
         row.className = 'gate-list-row';
         row.innerHTML = `
           <span><span class="gate-list-row__text">${entry.code}</span><span class="gate-list-row__time">${entry.date}, ${entry.time}</span></span>
-          <button class="gate-list-row__delete" aria-label="Remove">${DELETE_ICON_SVG}</button>
+          <button class="gate-list-row__delete" aria-label="Remove">${FarmSmart.icons.close}</button>
         `;
         row.querySelector('.gate-list-row__delete').addEventListener('click', () => {
-          const idx = list.indexOf(entry);
-          if (idx > -1) list.splice(idx, 1);
+          list.splice(list.indexOf(entry), 1);
           renderCard();
         });
         listEl.appendChild(row);
       });
     }
 
-    // ---- Build a row of paddock wheels for the given farm into containerEl ----
-    function buildPaddockWheels(containerEl, farmId) {
-      containerEl.innerHTML = '<div class="wheel-highlight"></div>';
-      const config = PADDOCK_WHEEL_CONFIG[farmId] || [];
-      return config.map((wheelDef) => {
+    function buildPaddockWheels(containerId) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '<div class="wheel-highlight"></div>';
+      const config = PADDOCK_WHEELS[FarmSmart.activeFarmId];
+      return (config ? config.wheels : []).map((values) => {
         const col = document.createElement('div');
-        containerEl.appendChild(col);
-        return FarmSmart.createWheel(col, wheelDef.values, 0);
+        container.appendChild(col);
+        return FarmSmart.createWheel(col, values, 0);
       });
     }
 
+    function selectedPaddockCode(wheels) {
+      const values = wheels.map((wheel) => wheel.getValue());
+      const config = PADDOCK_WHEELS[FarmSmart.activeFarmId];
+      return config ? config.toCode(values) : values.join('');
+    }
+
     // ---- "Timings" sheet ----
+    const timingsSheet = FarmSmart.createPanel('timingsSheetMask', 'timingsSheetBackBtn');
+    const dateButtons = document.querySelectorAll('#dateToggle .date-toggle__btn');
+
+    function selectDate(date) {
+      selectedDate = date;
+      dateButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.date === date));
+    }
+
     function openTimingsSheet() {
-      const list = currentSchedule();
-      if (list.length >= MAX_SCHEDULED) {
-        showToast(`Maximum ${MAX_SCHEDULED} scheduled gates — remove one first`);
+      if (currentSchedule().length >= MAX_SCHEDULED_GATES) {
+        showToast(`Maximum ${MAX_SCHEDULED_GATES} scheduled gates — remove one first`);
         return;
       }
-
-      const farm = FarmSmart.getActiveFarm();
-      selectedDate = 'Today';
-      document.querySelectorAll('#dateToggle .date-toggle__btn').forEach((btn) => {
-        btn.classList.toggle('active', btn.dataset.date === 'Today');
-      });
-
-      timingsPaddockWheelInstances = buildPaddockWheels(document.getElementById('timingsPaddockWheels'), farm.id);
-      timingsTimeWheelInstances = [
+      selectDate('Today');
+      timingsPaddockWheels = buildPaddockWheels('timingsPaddockWheels');
+      timingsTimeWheels = [
         FarmSmart.createWheel(document.getElementById('timingsHourWheel'), HOUR_VALUES, 0),
         FarmSmart.createWheel(document.getElementById('timingsMinuteWheel'), MINUTE_VALUES, 0),
         FarmSmart.createWheel(document.getElementById('timingsPeriodWheel'), PERIOD_VALUES, 0),
       ];
-
-      document.getElementById('timingsSheetMask').classList.add('show');
-    }
-    function closeTimingsSheet() {
-      document.getElementById('timingsSheetMask').classList.remove('show');
+      timingsSheet.open();
     }
 
-    document.querySelectorAll('#dateToggle .date-toggle__btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        selectedDate = btn.dataset.date;
-        document.querySelectorAll('#dateToggle .date-toggle__btn').forEach((b) => b.classList.toggle('active', b === btn));
-      });
-    });
+    dateButtons.forEach((btn) => btn.addEventListener('click', () => selectDate(btn.dataset.date)));
 
     document.getElementById('timingsSaveBtn').addEventListener('click', () => {
-      const farm = FarmSmart.getActiveFarm();
-      const code = composePaddockCode(farm.id, timingsPaddockWheelInstances.map((w) => w.getValue()));
-      const [hourWheel, minuteWheel, periodWheel] = timingsTimeWheelInstances;
-      const hour = hourWheel.getValue(), minute = minuteWheel.getValue(), period = periodWheel.getValue();
-      const time = `${hour}:${minute} ${period}`;
-
-      currentSchedule().push({ code, date: selectedDate, time, sortMinutes: to24HourMinutes(hour, minute, period) });
+      const code = selectedPaddockCode(timingsPaddockWheels);
+      const [hour, minute, period] = timingsTimeWheels.map((wheel) => wheel.getValue());
+      const entry = scheduleEntry(code, selectedDate, hour, minute, period);
+      currentSchedule().push(entry);
       renderCard();
-      closeTimingsSheet();
-      showToast(`${code} scheduled for ${selectedDate}, ${time}`);
+      timingsSheet.close();
+      showToast(`${code} scheduled for ${entry.date}, ${entry.time}`);
     });
 
     // ---- "Open Now" sheet ----
+    const openNowSheet = FarmSmart.createPanel('openNowSheetMask', 'openNowSheetBackBtn');
+
     function openOpenNowSheet() {
-      const farm = FarmSmart.getActiveFarm();
-      openNowPaddockWheelInstances = buildPaddockWheels(document.getElementById('openNowPaddockWheels'), farm.id);
-      document.getElementById('openNowSheetMask').classList.add('show');
-    }
-    function closeOpenNowSheet() {
-      document.getElementById('openNowSheetMask').classList.remove('show');
+      openNowPaddockWheels = buildPaddockWheels('openNowPaddockWheels');
+      openNowSheet.open();
     }
 
     document.getElementById('openNowConfirmBtn').addEventListener('click', () => {
-      const farm = FarmSmart.getActiveFarm();
-      const code = composePaddockCode(farm.id, openNowPaddockWheelInstances.map((w) => w.getValue()));
-
-      // The Open Now sheet stays open underneath while this confirms —
-      // if the person cancels, they land right back on the wheels
-      // instead of having to reopen the sheet from scratch.
-      openConfirm(
-        `Open paddock ${code} now?`,
-        `This will open paddock ${code} immediately.`,
-        'Open',
-        () => {
-          closeOpenNowSheet();
-          showToast(`Paddock ${code} opened now`);
-        }
-      );
+      const code = selectedPaddockCode(openNowPaddockWheels);
+      // The sheet stays open underneath, so cancelling lands back on the wheels.
+      openConfirm(`Open paddock ${code} now?`, `This will open paddock ${code} immediately.`, 'Open', () => {
+        openNowSheet.close();
+        showToast(`Paddock ${code} opened now`);
+      });
     });
-
-    // Close either sheet by tapping the dimmed background.
-    document.getElementById('timingsSheetMask').addEventListener('click', (e) => {
-      if (e.target.id === 'timingsSheetMask') closeTimingsSheet();
-    });
-    document.getElementById('timingsSheetBackBtn').addEventListener('click', closeTimingsSheet);
-    document.getElementById('openNowSheetMask').addEventListener('click', (e) => {
-      if (e.target.id === 'openNowSheetMask') closeOpenNowSheet();
-    });
-    document.getElementById('openNowSheetBackBtn').addEventListener('click', closeOpenNowSheet);
 
     document.getElementById('editTimingsBtn').addEventListener('click', openTimingsSheet);
     document.getElementById('openGateNowBtn').addEventListener('click', openOpenNowSheet);
-
     document.addEventListener('farmsmart:farmchanged', renderCard);
     renderCard();
   },

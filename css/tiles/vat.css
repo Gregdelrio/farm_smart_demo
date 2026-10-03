@@ -1,17 +1,9 @@
-/* =====================================================================
-   TILE: MILK VAT TEMPERATURE
-   ---------------------------------------------------------------------
-   Only styles for markup found inside this tile's <div class="card">
-   (defined in js/tiles/vat.js). Shared shell/badge/overlay styles come
-   from css/base.css.
-   ===================================================================== */
+/* TILE: MILK VAT TEMPERATURE — see js/tiles/vat.js */
 
 .vat-temp-frame {
   border-radius: 20px; padding: 3vh 4cqw; text-align: center;
   background: #3B6D11; /* green = in range */
-  color: #fff; /* ALWAYS white, regardless of theme — this is a solid saturated
-                   block, not page background, so it must not inherit the
-                   theme's text color (which would be dark in light mode) */
+  color: #fff; /* white in both themes: it sits on a saturated block, not the page */
   transition: background 0.3s ease;
 }
 .vat-temp-frame.alert { background: #E24B4A; } /* red = genuinely out of range */
@@ -25,14 +17,19 @@
 
 .vat-meta { text-align: center; font-size: 3.3cqw; color: var(--text-muted); font-weight: 600; margin-top: 1.5vh; }
 
-/* ---- 24h trend chart (inline SVG) — theme-aware colors ----
-   The chart's grid lines / axis labels use these classes (instead of
-   hardcoded white-based rgba values) so they stay legible in both
-   dark and light mode, since the CSS variables they reference already
-   flip correctly between themes. The temperature line itself
-   (green/red) is set directly in JS and doesn't need this — those are
-   fixed status colors, not text-on-background, and read fine on
-   either theme already. */
+/* ---- Details overlay ---- */
+.vat-section-title { display: block; margin-bottom: 2vh; }
+.vat-section-title--chart { margin-bottom: 1.25rem; }
+.row-line .vat-live-alert { color: #ff9b8a; }
+
+.vat-stat-row { display: flex; gap: 1rem; margin: 0 1.5rem 1.25rem; }
+.vat-stat { flex: 1; background: var(--bg-card); border-radius: 16px; padding: 1.5rem 0.5rem; text-align: center; }
+.vat-stat__label { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; margin: 0 0 0.5vh; }
+.vat-stat__value { font-size: 1.6rem; font-weight: 800; margin: 0; }
+
+/* 24h chart: grid and labels use theme variables so they read in both
+   themes; the temperature line's status colour is set in JS. */
+.vat-chart { width: 100%; height: 150px; overflow: visible; }
 .vat-chart-grid { stroke: var(--border-divider); stroke-width: 1; }
 .vat-chart-label { fill: var(--text-faint); }
 .vat-chart-limit-line { stroke: var(--color-red); opacity: 0.55; }
