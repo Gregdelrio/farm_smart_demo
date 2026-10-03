@@ -1,24 +1,13 @@
 /* =====================================================================
    TILE: MILK VAT TEMPERATURE
-   ---------------------------------------------------------------------
-   TO DISABLE THIS TILE: comment out (or delete) these two lines in
-   index.html:
-     <link rel="stylesheet" href="css/tiles/vat.css">
-     <script src="js/tiles/vat.js"></script>
-
-   DESIGN NOTES:
-   - The badge just shows "Synced X min ago" — no OK/Alert text, since
-     the colored frame around the temperature already shows that
-     visually (green = fine, red = out of range).
-   - The meta line under the frame ONLY appears during an alert (e.g.
-     "Above 6°C for 18 min") — no "Last CIP..." line anymore.
-   - "View details" opens a real chart: temperature on the Y axis,
-     time of day on the X axis, covering the last 24 hours relative to
-     the actual current time — see buildTrendChart() below.
+   The coloured frame carries the status (green = in range, red = too
+   warm); the meta line under it only appears during an alert. "View
+   details" draws the last 24 h relative to the current time.
    ===================================================================== */
 
 FarmSmart.registerTile({
   id: 'vat',
+  name: 'Milk Vat',
 
   html: `
     <div class="card">
@@ -40,37 +29,29 @@ FarmSmart.registerTile({
 
     <div class="overlay" id="vatDetailsOverlay">
       <div class="overlay-header">
-        <button class="close-btn" id="vatBackBtn" aria-label="Back">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        </button>
+        <button class="close-btn" id="vatBackBtn" aria-label="Back">${FarmSmart.icons.back}</button>
         <h1>Today</h1>
       </div>
 
       <div class="card">
-        <span class="card-title" style="margin-bottom:1.25rem;display:block;">Last 24 hours</span>
-        <svg id="trendChart" viewBox="0 0 320 150" style="width:100%;height:150px;overflow:visible;"></svg>
+        <span class="card-title vat-section-title vat-section-title--chart">Last 24 hours</span>
+        <svg id="trendChart" class="vat-chart" viewBox="0 0 320 150"></svg>
       </div>
 
-      <div class="stat-row" style="display:flex;gap:1rem;margin: 0 1.5rem 1.25rem;">
-        <div style="flex:1;background:var(--bg-card);border-radius:16px;padding:1.5rem 0.5rem;text-align:center;">
-          <p style="font-size:0.85rem;color:var(--text-muted);font-weight:600;margin:0 0 0.5vh;">Min 24h</p>
-          <p style="font-size:1.6rem;font-weight:800;margin:0;" id="minVal">2.9°</p>
-        </div>
-        <div style="flex:1;background:var(--bg-card);border-radius:16px;padding:1.5rem 0.5rem;text-align:center;">
-          <p style="font-size:0.85rem;color:var(--text-muted);font-weight:600;margin:0 0 0.5vh;">Max 24h</p>
-          <p style="font-size:1.6rem;font-weight:800;margin:0;" id="maxVal">4.1°</p>
-        </div>
+      <div class="vat-stat-row">
+        <div class="vat-stat"><p class="vat-stat__label">Min 24h</p><p class="vat-stat__value" id="minVal">2.9°</p></div>
+        <div class="vat-stat"><p class="vat-stat__label">Max 24h</p><p class="vat-stat__value" id="maxVal">4.1°</p></div>
       </div>
 
       <div class="card">
-        <span class="card-title" style="margin-bottom:2vh;display:block;">Alert log</span>
-        <div class="row-line" id="liveAlertRow" style="display:none;"><span class="k">Now</span><span class="v" id="liveAlertVal" style="color:#ff9b8a;">In progress · 18 min</span></div>
+        <span class="card-title vat-section-title">Alert log</span>
+        <div class="row-line" id="liveAlertRow" style="display:none;"><span class="k">Now</span><span class="v vat-live-alert">In progress · 18 min</span></div>
         <div class="row-line"><span class="k">Jul 28, 2:12 PM</span><span class="v ok">Resolved · 3 min</span></div>
         <div class="row-line"><span class="k">Jul 15, 3:40 AM</span><span class="v ok">Resolved · 9 min</span></div>
       </div>
 
-      <div class="card" style="margin-bottom:6vh;">
-        <span class="card-title" style="margin-bottom:2vh;display:block;">Sensor status</span>
+      <div class="card overlay-last-card">
+        <span class="card-title vat-section-title">Sensor status</span>
         <div class="row-line"><span class="k">4G signal</span><span class="v" id="signalVal">Good · -78 dBm</span></div>
         <div class="row-line"><span class="k">Battery</span><span class="v">94%</span></div>
         <div class="row-line"><span class="k">Last sync</span><span class="v" id="syncVal">2 min ago</span></div>
@@ -79,125 +60,82 @@ FarmSmart.registerTile({
   `,
 
   init: function () {
-    let vatAlert = false;
+    const ALERT_THRESHOLD_C = 6;
 
-    // Demo data for the last 24 hours (index 0 = 24h ago, index 23 =
-    // right now). Swap for a real sensor feed in production —
-    // buildTrendChart() just needs an array of 24 numbers.
+    // Index 0 = 24 h ago, index 23 = now. Swap for a real sensor feed.
     const NORMAL_READINGS = [3.4, 4.1, 3.3, 4.4, 3.6, 2.9, 4.2, 3.5, 4.6, 3.2, 3.9, 4.3, 2.8, 3.7, 4.5, 3.3, 4.0, 3.1, 4.4, 3.6, 2.9, 4.1, 3.5, 3.8];
     const ALERT_READINGS  = [3.4, 4.1, 3.3, 4.4, 3.6, 2.9, 4.2, 3.5, 4.6, 3.2, 3.9, 4.3, 2.8, 3.7, 4.5, 3.3, 4.0, 3.1, 4.4, 4.8, 5.9, 7.1, 7.7, 8.2];
 
+    // Everything that differs between the normal and the alert state.
+    const STATES = {
+      normal: { readings: NORMAL_READINGS, icon: 'ti-check', temp: '3.8', text: 'All good', meta: '', signal: 'Good · -78 dBm', sync: '2 min ago', button: '<i class="ti ti-alert-triangle"></i>Simulate alert' },
+      alert: { readings: ALERT_READINGS, icon: 'ti-alert-triangle', temp: '8.2', text: 'Too warm', meta: 'Above 6°C for 18 min', signal: 'Weak · -102 dBm', sync: 'just now', button: '<i class="ti ti-check"></i>Back to normal' },
+    };
+
+    let isAlert = false;
+    const currentReadings = () => (isAlert ? ALERT_READINGS : NORMAL_READINGS);
+
     function buildTrendChart(data) {
-      const svg = document.getElementById('trendChart');
       const left = 34, right = 10, top = 12, bottom = 24;
       const width = 320, height = 150;
       const plotW = width - left - right;
       const plotH = height - top - bottom;
-
-      const yTicks = [0, 2, 4, 6, 8, 10]; // °C
       const yFor = (temp) => top + plotH - (temp / 10) * plotH;
       const xFor = (i) => left + (i / (data.length - 1)) * plotW;
+      const parts = [];
 
-      let svgParts = [];
-
-      yTicks.forEach((t) => {
+      [0, 2, 4, 6, 8, 10].forEach((t) => {
         const y = yFor(t);
-        svgParts.push(`<line x1="${left}" y1="${y}" x2="${width - right}" y2="${y}" class="vat-chart-grid"/>`);
-        svgParts.push(`<text x="${left - 6}" y="${y + 3}" font-size="9" class="vat-chart-label" text-anchor="end">${t}°</text>`);
+        parts.push(`<line x1="${left}" y1="${y}" x2="${width - right}" y2="${y}" class="vat-chart-grid"/>`);
+        parts.push(`<text x="${left - 6}" y="${y + 3}" font-size="9" class="vat-chart-label" text-anchor="end">${t}°</text>`);
       });
 
-      const limitY = yFor(6);
-      svgParts.push(`<line x1="${left}" y1="${limitY}" x2="${width - right}" y2="${limitY}" class="vat-chart-limit-line" stroke-width="1.5" stroke-dasharray="4,4"/>`);
+      const limitY = yFor(ALERT_THRESHOLD_C);
+      parts.push(`<line x1="${left}" y1="${limitY}" x2="${width - right}" y2="${limitY}" class="vat-chart-limit-line" stroke-width="1.5" stroke-dasharray="4,4"/>`);
 
-      const now = new Date();
+      const now = Date.now();
       [0, 6, 12, 18, 23].forEach((i) => {
-        const hoursAgo = (data.length - 1) - i;
-        const labelTime = new Date(now.getTime() - hoursAgo * 3600 * 1000);
-        const label = labelTime.toLocaleTimeString('en-US', { hour: 'numeric' });
-        svgParts.push(`<text x="${xFor(i)}" y="${height - 6}" font-size="9" class="vat-chart-label" text-anchor="middle">${label}</text>`);
+        const hoursAgo = data.length - 1 - i;
+        const label = new Date(now - hoursAgo * 3600 * 1000).toLocaleTimeString('en-US', { hour: 'numeric' });
+        parts.push(`<text x="${xFor(i)}" y="${height - 6}" font-size="9" class="vat-chart-label" text-anchor="middle">${label}</text>`);
       });
 
       const points = data.map((temp, i) => `${xFor(i)},${yFor(temp)}`).join(' ');
-      const lineColor = Math.max(...data) > 6 ? '#ff6b6b' : '#6bd47a';
-      svgParts.push(`<polyline points="${points}" fill="none" stroke="${lineColor}" stroke-width="3"/>`);
+      const lineColor = Math.max(...data) > ALERT_THRESHOLD_C ? '#ff6b6b' : '#6bd47a';
+      parts.push(`<polyline points="${points}" fill="none" stroke="${lineColor}" stroke-width="3"/>`);
 
-      svg.innerHTML = svgParts.join('');
+      document.getElementById('trendChart').innerHTML = parts.join('');
     }
 
-    function setVatState(alertOn) {
-      vatAlert = alertOn;
-
-      const frame = document.getElementById('tempFrame');
-      const temp = document.getElementById('temp');
-      const icon = document.getElementById('statusIcon');
-      const text = document.getElementById('statusText');
+    function setAlert(alertOn) {
+      isAlert = alertOn;
+      const s = alertOn ? STATES.alert : STATES.normal;
       const meta = document.getElementById('meta');
-      const liveAlertRow = document.getElementById('liveAlertRow');
-      const signalVal = document.getElementById('signalVal');
-      const syncVal = document.getElementById('syncVal');
-      const minVal = document.getElementById('minVal');
-      const maxVal = document.getElementById('maxVal');
 
-      const data = alertOn ? ALERT_READINGS : NORMAL_READINGS;
-
-      if (alertOn) {
-        frame.classList.add('alert');
-        icon.className = 'ti ti-alert-triangle';
-        temp.innerHTML = '8.2<span class="unit">°C</span>';
-        text.textContent = 'Too warm';
-
-        meta.textContent = 'Above 6°C for 18 min';
-        meta.style.display = 'block';
-
-        liveAlertRow.style.display = 'flex';
-        signalVal.textContent = 'Weak · -102 dBm';
-        syncVal.textContent = 'just now';
-      } else {
-        frame.classList.remove('alert');
-        icon.className = 'ti ti-check';
-        temp.innerHTML = '3.8<span class="unit">°C</span>';
-        text.textContent = 'All good';
-
-        meta.textContent = '';
-        meta.style.display = 'none';
-
-        liveAlertRow.style.display = 'none';
-        signalVal.textContent = 'Good · -78 dBm';
-        syncVal.textContent = '2 min ago';
-      }
-
-      minVal.textContent = Math.min(...data).toFixed(1) + '°';
-      maxVal.textContent = Math.max(...data).toFixed(1) + '°';
-      buildTrendChart(data);
-
-      const simulateBtn = document.getElementById('vatSimulateAlertBtn');
-      if (simulateBtn) {
-        simulateBtn.innerHTML = alertOn
-          ? '<i class="ti ti-check"></i>Back to normal'
-          : '<i class="ti ti-alert-triangle"></i>Simulate alert';
-      }
+      document.getElementById('tempFrame').classList.toggle('alert', alertOn);
+      document.getElementById('statusIcon').className = 'ti ' + s.icon;
+      document.getElementById('temp').innerHTML = `${s.temp}<span class="unit">°C</span>`;
+      document.getElementById('statusText').textContent = s.text;
+      meta.textContent = s.meta;
+      meta.style.display = alertOn ? 'block' : 'none';
+      document.getElementById('liveAlertRow').style.display = alertOn ? 'flex' : 'none';
+      document.getElementById('signalVal').textContent = s.signal;
+      document.getElementById('syncVal').textContent = s.sync;
+      document.getElementById('minVal').textContent = Math.min(...s.readings).toFixed(1) + '°';
+      document.getElementById('maxVal').textContent = Math.max(...s.readings).toFixed(1) + '°';
+      document.getElementById('vatSimulateAlertBtn').innerHTML = s.button;
+      buildTrendChart(s.readings);
     }
 
-    // "Synced X min ago" badge — refreshes periodically so it feels live.
-    function refreshSyncBadge() {
-      document.getElementById('vatBadge').textContent = FarmSmart.randomSyncLabel();
-    }
-
+    const details = FarmSmart.createPanel('vatDetailsOverlay', 'vatBackBtn');
     document.getElementById('vatDetailsBtn').addEventListener('click', () => {
-      buildTrendChart(vatAlert ? ALERT_READINGS : NORMAL_READINGS); // redraw with "now" up to date
-      document.getElementById('vatDetailsOverlay').classList.add('show');
+      buildTrendChart(currentReadings()); // redraw so the time axis ends at "now"
+      details.open();
     });
-    // Visible demo button — same effect as the double-tap-the-frame
-    // shortcut below, but discoverable without needing to know that
-    // gesture exists (handy for showing this live to someone).
-    document.getElementById('vatSimulateAlertBtn').addEventListener('click', () => setVatState(!vatAlert));
-    document.getElementById('vatBackBtn').addEventListener('click', () => {
-      document.getElementById('vatDetailsOverlay').classList.remove('show');
-    });
-    // Demo trigger: double-tap the colored frame to toggle the alert state.
-    document.getElementById('tempFrame').addEventListener('dblclick', () => setVatState(!vatAlert));
+    document.getElementById('vatSimulateAlertBtn').addEventListener('click', () => setAlert(!isAlert));
+    // Hidden demo shortcut, same as the button.
+    document.getElementById('tempFrame').addEventListener('dblclick', () => setAlert(!isAlert));
 
-    refreshSyncBadge();
-    setInterval(refreshSyncBadge, 20000);
+    FarmSmart.startSyncBadge('vatBadge');
   },
 });

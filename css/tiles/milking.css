@@ -1,6 +1,4 @@
-/* =====================================================================
-   TILE: LIVE MILKING STATUS
-   ===================================================================== */
+/* TILE: LIVE MILKING — see js/tiles/milking.js */
 
 .milk-count-row { display: flex; align-items: baseline; justify-content: space-between; }
 .milk-count { font-size: 11cqw; font-weight: 800; }

@@ -1,106 +1,188 @@
 /* =====================================================================
    FARMSMART — CORE
-   ---------------------------------------------------------------------
-   This file is the "shell": everything every tile can rely on, but no
-   tile-specific logic. Tiles never talk to each other directly — they
-   only use what's defined here (FarmSmart.registerTile, showToast,
-   openConfirm, etc). That's what keeps each tile file independent and
-   safe to add/remove on its own (see README.md "Enabling/disabling a
-   tile").
+   The shell every tile relies on, with no tile-specific logic. Tiles
+   never talk to each other: they only use what's defined here, which is
+   what lets each one be enabled or disabled from index.html alone.
 
    Sections:
-     1. FarmSmart namespace + tile registry (the module system)
-     2. Farm data + farm switcher
-     3. User data + user switcher (role-based access is NOT implemented
-        yet — see the TODO in section 3)
-     4. Generic confirmation dialog (neutral, not a red warning)
-     5. Toast helper
-     6. Online/offline status
-     7. Boot — mounts every registered tile once the page has loaded
+     1. Tile registry
+     2. Shared helpers
+     3. Farms + farm switcher
+     4. Users + user switcher
+     5. Confirmation dialog + toast
+     6. Wheel picker
+     7. Theme, online status, demo banner
+     8. Visitor notifications (ntfy.sh)
+     9. Boot
    ===================================================================== */
 
 /* ---------------------------------------------------------------------
-   1. FARMSMART NAMESPACE + TILE REGISTRY
-   ---------------------------------------------------------------------
-   HOW THE MODULE SYSTEM WORKS:
-   Each tile file (js/tiles/xxx.js) calls FarmSmart.registerTile({...})
-   when it loads. That just pushes the tile's definition into an array
-   — nothing appears on screen yet. Once the whole page has finished
-   loading, mountTiles() (section 7) walks that array *in the order the
-   tiles were registered* (i.e. the order their <script> tags appear in
-   index.html) and:
-     1. Injects the tile's HTML string into the #dashboard container.
-     2. Calls the tile's init() function, which wires up its buttons.
-
-   This means a tile is a completely self-contained unit: its markup,
-   its styles (its own css/tiles/xxx.css file), and its behavior (its
-   own js/tiles/xxx.js file) all live together. To remove a tile from
-   the app, you only ever touch index.html — comment out its <link>
-   and <script> tags and it's gone, without editing this file or any
-   other tile.
+   1. TILE REGISTRY
+   Each tile file calls registerTile() when it loads; boot() then injects
+   every tile's markup into #dashboard, in registration order (= the
+   order of the <script> tags in index.html), and runs its init().
 --------------------------------------------------------------------- */
 window.FarmSmart = window.FarmSmart || { tiles: [] };
 
 /**
- * Called by each tile file to register itself.
- * @param {Object} tile
- * @param {string} tile.id     - unique id, e.g. 'vat'
- * @param {string} tile.html   - the tile's full <div class="card">...</div> markup
- * @param {Function} [tile.init] - runs once the markup is in the DOM;
- *                                  attach event listeners here
+ * Registers a tile to be mounted at boot.
+ * @param {{id: string, name: string, html: string, init?: Function}} tile
+ *   `name` labels the tile in the visit summary; `init` runs once its
+ *   markup is in the DOM.
  */
 FarmSmart.registerTile = function (tile) {
   FarmSmart.tiles.push(tile);
 };
 
 /* ---------------------------------------------------------------------
-   2. FARM DATA + FARM SWITCHER
-   Single source of truth for the farm list — add/remove a farm here
-   and the switcher sheet re-renders itself, no HTML edits needed.
+   2. SHARED HELPERS
 --------------------------------------------------------------------- */
-const FARMS = [
-  { id: 'laang',    name: 'Laang Farm',           meta: 'Dairy - Peter',  ownerFirstName: 'Peter',  herdSize: 355, roadName: 'Thorburns Road', lat: -38.361, lng: 142.814 },
-  { id: 'maguires', name: 'Maguires Road Dairy',  meta: 'Dairy - John',   ownerFirstName: 'John',   herdSize: 557, roadName: 'Maguires Road', lat: -38.300, lng: 142.780 },
-  { id: 'vickers',  name: 'Vickers Road Panmure', meta: 'Dairy - Damian', ownerFirstName: 'Damian', herdSize: 992, roadName: 'Vickers Road', lat: -38.333, lng: 142.733 },
-  // Add further farms here as plain objects — the switcher sheet in
-  // js/core.js §2 renders straight from this array, so nothing else
-  // needs to change. `herdSize`/`ownerFirstName` are used by the Live
-  // Milking tile, `roadName` by the Road Crossing tile.
-];
-FarmSmart.activeFarmId = 'maguires'; // default farm shown when the app first loads
-FarmSmart.getActiveFarm = function () {
-  return FARMS.find((f) => f.id === FarmSmart.activeFarmId);
+FarmSmart.icons = {
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
 };
 
-function renderFarmList() {
-  const list = document.getElementById('farmList');
+/** Escapes text before it is inserted into an HTML string. */
+FarmSmart.escapeHtml = function (value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+};
+
+/**
+ * Formats a date as YYYY-MM-DD in local time. Not toISOString(), which
+ * converts to UTC first and shifts the day for anyone ahead of UTC.
+ */
+FarmSmart.toDateKey = function (date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+/** Great-circle distance in km between two {lat, lng} points. */
+FarmSmart.distanceKm = function (a, b) {
+  const rad = (deg) => (deg * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+};
+
+// localStorage can throw (private mode, sandboxed previews). Failing to
+// persist a preference is never worth surfacing, so these swallow errors.
+FarmSmart.storage = {
+  get(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  },
+  set(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* not persisted */ }
+  },
+  /** Parsed JSON value, or null when missing or unreadable. */
+  getJson(key) {
+    try { return JSON.parse(FarmSmart.storage.get(key)); } catch (e) { return null; }
+  },
+  setJson(key, value) {
+    FarmSmart.storage.set(key, JSON.stringify(value));
+  },
+};
+
+// One Supabase project for the whole app. The anon key is public by
+// design; access is controlled by the project's row-level security.
+const SUPABASE_URL = 'https://gissuvlnkztpbvghymmz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdpc3N1dmxua3p0cGJ2Z2h5bW16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTUxMTAsImV4cCI6MjEwNTg3MTExMH0.iPshYfbWiiFNGjGQVKNxy55M5kbBci3Ti--4xbUOVM0';
+let supabaseClient = null;
+
+/** Shared Supabase client, created on first use. */
+FarmSmart.supabase = function () {
+  if (supabaseClient) return supabaseClient;
+  if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+    throw new Error('supabase-js not loaded — check the <script> tag in index.html');
+  }
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return supabaseClient;
+};
+
+/**
+ * Wires a sheet or overlay (shown with the `show` class): its back
+ * button closes it, and so does a tap on a sheet's dimmed backdrop.
+ */
+FarmSmart.createPanel = function (panelId, backButtonId) {
+  const panel = document.getElementById(panelId);
+  const open = () => panel.classList.add('show');
+  const close = () => panel.classList.remove('show');
+  if (backButtonId) document.getElementById(backButtonId).addEventListener('click', close);
+  if (panel.classList.contains('sheet-mask')) {
+    panel.addEventListener('click', (e) => { if (e.target === panel) close(); });
+  }
+  return { open, close };
+};
+
+FarmSmart.isOwner = function () {
+  return FarmSmart.currentUser.role === 'Owner';
+};
+
+/** Hides a tile entirely (and closes its overlay) for anyone but the Owner. */
+FarmSmart.restrictToOwner = function (cardId, overlayId) {
+  function apply() {
+    const isOwner = FarmSmart.isOwner();
+    document.getElementById(cardId).style.display = isOwner ? '' : 'none';
+    if (!isOwner) document.getElementById(overlayId).classList.remove('show');
+  }
+  document.addEventListener('farmsmart:userchanged', apply);
+  apply();
+};
+
+/** Stand-in for a real sensor's last-sync time: random 1–10 min. */
+FarmSmart.randomSyncLabel = function () {
+  const minutes = 1 + Math.floor(Math.random() * 10);
+  return `Synced ${minutes} min ago`;
+};
+
+/** Keeps a badge showing a fresh randomSyncLabel(), so it feels live. */
+FarmSmart.startSyncBadge = function (badgeId) {
+  const refresh = () => { document.getElementById(badgeId).textContent = FarmSmart.randomSyncLabel(); };
+  refresh();
+  setInterval(refresh, 20000);
+};
+
+/* ---------------------------------------------------------------------
+   3. FARMS + FARM SWITCHER
+   herdSize is used by Live Milking, roadName by Road Crossing, lat/lng
+   by Shift Clock and Farm Plan.
+--------------------------------------------------------------------- */
+FarmSmart.farms = [
+  { id: 'laang',    name: 'Laang Farm',           meta: 'Dairy - Peter',  herdSize: 355, roadName: 'Thorburns Road', lat: -38.361, lng: 142.814 },
+  { id: 'maguires', name: 'Maguires Road Dairy',  meta: 'Dairy - John',   herdSize: 557, roadName: 'Maguires Road',  lat: -38.300, lng: 142.780 },
+  { id: 'vickers',  name: 'Vickers Road Panmure', meta: 'Dairy - Damian', herdSize: 992, roadName: 'Vickers Road',   lat: -38.333, lng: 142.733 },
+];
+FarmSmart.activeFarmId = 'maguires';
+
+FarmSmart.getFarm = function (farmId) {
+  return FarmSmart.farms.find((farm) => farm.id === farmId);
+};
+FarmSmart.getActiveFarm = function () {
+  return FarmSmart.getFarm(FarmSmart.activeFarmId);
+};
+
+/** Fills a switcher sheet with one row per item, marking the active one. */
+function renderSheetRows(listId, items, activeId, getMeta, onTap) {
+  const list = document.getElementById(listId);
   list.innerHTML = '';
-  FARMS.forEach((farm) => {
+  items.forEach((item) => {
     const row = document.createElement('button');
-    row.className = 'sheet-row' + (farm.id === FarmSmart.activeFarmId ? ' active' : '');
-    row.innerHTML = `<span class="sheet-row__title">${farm.name}</span><span class="sheet-row__meta">${farm.meta}</span>`;
-    row.onclick = () => onFarmTapped(farm);
+    row.className = 'sheet-row' + (item.id === activeId ? ' active' : '');
+    row.innerHTML = `<span class="sheet-row__title">${item.name}</span><span class="sheet-row__meta">${getMeta(item)}</span>`;
+    row.onclick = () => onTap(item);
     list.appendChild(row);
   });
 }
 
-function openFarmSheet() {
-  renderFarmList();
-  document.getElementById('farmSheetMask').classList.add('show');
-}
-function closeFarmSheet() {
-  document.getElementById('farmSheetMask').classList.remove('show');
-}
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('farmSheetMask').addEventListener('click', (e) => {
-    if (e.target.id === 'farmSheetMask') closeFarmSheet();
-  });
-});
+let farmSheet = null;
 
+function openFarmSheet() {
+  renderSheetRows('farmList', FarmSmart.farms, FarmSmart.activeFarmId, (farm) => farm.meta, onFarmTapped);
+  farmSheet.open();
+}
 
 function onFarmTapped(farm) {
-  closeFarmSheet();
-  if (farm.id === FarmSmart.activeFarmId) return; // already active, nothing to confirm
+  farmSheet.close();
+  if (farm.id === FarmSmart.activeFarmId) return;
 
   openConfirm(
     'Switch farm?',
@@ -110,30 +192,14 @@ function onFarmTapped(farm) {
       FarmSmart.activeFarmId = farm.id;
       document.getElementById('activeFarmName').textContent = farm.name;
       showToast('Switched to ' + farm.name);
-      // Let any tile that depends on which farm is active (e.g. Live
-      // Milking's herd size) know it should refresh itself.
       document.dispatchEvent(new CustomEvent('farmsmart:farmchanged', { detail: { farm } }));
     }
   );
 }
 
 /* ---------------------------------------------------------------------
-   3. USER DATA + USER SWITCHER
-   ---------------------------------------------------------------------
-   TODO (role-based access): both users currently see and can do
-   exactly the same things. Once it's decided what an Employee should
-   NOT have access to, the place to enforce it is here:
-     - FarmSmart.currentUser.role holds 'owner' or 'employee' at all
-       times (updated by onUserTapped below).
-     - A tile can check it, e.g. inside its init():
-         if (FarmSmart.currentUser.role !== 'owner') {
-           document.getElementById('someRestrictedButton').hidden = true;
-         }
-     - Or, simpler for many small restrictions at once: give any
-       element that should be Owner-only a `data-requires-role="owner"`
-       attribute, and add a loop here in mountTiles() (section 7) that
-       hides every such element when the current user isn't an owner.
-   Neither of those is wired up yet — this is just where it will go.
+   4. USERS + USER SWITCHER
+   Tiles read FarmSmart.isOwner() to restrict what an Employee sees.
 --------------------------------------------------------------------- */
 const USERS = [
   { id: 'john', name: 'John', role: 'Owner', initials: 'J' },
@@ -141,38 +207,18 @@ const USERS = [
 ];
 FarmSmart.currentUser = USERS[0];
 
-function renderUserList() {
-  const list = document.getElementById('userList');
-  list.innerHTML = '';
-  USERS.forEach((user) => {
-    const row = document.createElement('button');
-    row.className = 'sheet-row' + (user.id === FarmSmart.currentUser.id ? ' active' : '');
-    row.innerHTML = `<span class="sheet-row__title">${user.name}</span><span class="sheet-row__meta">${user.role}</span>`;
-    row.onclick = () => onUserTapped(user);
-    list.appendChild(row);
-  });
-}
+let userSheet = null;
 
 function openUserSheet() {
-  renderUserList();
-  document.getElementById('userSheetMask').classList.add('show');
+  renderSheetRows('userList', USERS, FarmSmart.currentUser.id, (user) => user.role, onUserTapped);
+  userSheet.open();
 }
-function closeUserSheet() {
-  document.getElementById('userSheetMask').classList.remove('show');
-}
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('userSheetMask').addEventListener('click', (e) => {
-    if (e.target.id === 'userSheetMask') closeUserSheet();
-  });
-});
 
 function onUserTapped(user) {
-  closeUserSheet();
+  userSheet.close();
   if (user.id === FarmSmart.currentUser.id) return;
 
-  // Switching who's using the app isn't a destructive action (unlike
-  // switching farms, which reloads real data) — no confirmation step,
-  // just switch and confirm with a toast.
+  // Unlike switching farms, nothing reloads here, so no confirmation.
   FarmSmart.currentUser = user;
   document.getElementById('activeUserInitials').textContent = user.initials;
   document.getElementById('activeUserName').textContent = user.name;
@@ -182,271 +228,63 @@ function onUserTapped(user) {
 }
 
 /* ---------------------------------------------------------------------
-   4. GENERIC CONFIRMATION DIALOG
-   A plain "are you sure?" step — not a danger warning. Used before
-   anything that would be annoying to trigger by accident (switching
-   farms, starting the road crossing sequence, opening a gate early).
-   Styled with the neutral yellow accent in css/base.css, never red —
-   red is reserved for genuine problem states inside individual tiles
-   (e.g. the vat temperature tile's own alert state).
+   5. CONFIRMATION DIALOG + TOAST
+   The dialog is a neutral "are you sure?", never a red warning: red is
+   reserved for real problem states inside tiles.
 --------------------------------------------------------------------- */
 let pendingConfirmAction = null;
 
 function openConfirm(title, message, confirmLabel, onConfirm) {
   document.getElementById('confirmTitle').textContent = title;
-  const msgEl = document.getElementById('confirmMsg');
-  msgEl.textContent = message;
-  msgEl.style.display = message ? 'block' : 'none';
+  const messageEl = document.getElementById('confirmMsg');
+  messageEl.textContent = message;
+  messageEl.style.display = message ? 'block' : 'none';
   document.getElementById('confirmOkBtn').textContent = confirmLabel;
   pendingConfirmAction = onConfirm;
   document.getElementById('confirmMask').classList.add('show');
 }
+
 function closeConfirm() {
   document.getElementById('confirmMask').classList.remove('show');
   pendingConfirmAction = null;
 }
-document.addEventListener('DOMContentLoaded', () => {
+
+function bindConfirmDialog() {
   document.getElementById('confirmOkBtn').addEventListener('click', () => {
     const action = pendingConfirmAction;
     closeConfirm();
     if (action) action();
   });
-});
+}
 
-/* ---------------------------------------------------------------------
-   5. TOAST HELPER
---------------------------------------------------------------------- */
+let toastTimer = null;
+
 function showToast(message) {
   const toast = document.getElementById('toast');
   toast.textContent = message;
   toast.classList.add('show');
-  clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(() => toast.classList.remove('show'), 2400);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
 }
-
-// Shared by any tile that shows a "Synced X min ago" indicator (Milk
-// Vat, Live Milking) instead of a status badge — random 1-10, as a
-// stand-in for a real "last synced" timestamp from a live sensor feed.
-FarmSmart.randomSyncLabel = function () {
-  const minutes = 1 + Math.floor(Math.random() * 10);
-  return `Synced ${minutes} min ago`;
-};
 
 /* ---------------------------------------------------------------------
-   6. VISITOR NOTIFICATIONS (ntfy.sh)
-   ---------------------------------------------------------------------
-   Sends a push notification to your phone every time someone opens the
-   app, and a second one summarizing what they clicked when they leave.
-   Also used directly by the "Share the app" button (see index.html).
-
-   SETUP — do this once:
-     1. Install the ntfy app: https://ntfy.sh/ (App Store / Play Store).
-     2. Pick a private topic name only you know — long and hard to
-        guess, since anyone who knows it can also read/send to it.
-        Replace NTFY_TOPIC below with it.
-     3. In the ntfy app, subscribe to that exact same topic name.
-   That's it — no account, no API key.
-
-   Every call here is wrapped so it can NEVER break the app: if ntfy.sh
-   is blocked (ad blocker, offline, etc.), these just silently do
-   nothing instead of throwing an error anywhere else in the app.
+   6. WHEEL PICKER
+   iPhone-style snap-to-centre scroll column (used by Gates). Returns
+   { getValue(), getIndex(), setIndex(i) }.
 --------------------------------------------------------------------- */
-const NTFY_TOPIC = 'farm-smart-visits-x203xxxcv45'; // <-- set this to your own private topic name
-
-function sendNtfy(message, options) {
-  options = options || {};
-  try {
-    fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-      method: 'POST',
-      body: message,
-      headers: {
-        'Title': options.title || 'FarmSmart',
-        'Tags': options.tags || 'farmer',
-      },
-    }).catch(() => {}); // network/blocked — fail silently, never break the app
-  } catch (e) {
-    // synchronous failure (e.g. fetch unavailable) — also fail silently
-  }
-}
-
-// Used only for the click-summary sent as the page is closing — regular
-// fetch() calls can get cancelled mid-flight when a tab closes, but
-// sendBeacon() is specifically designed to reliably finish in that
-// situation. It can't set custom headers (title/tags), so the "title"
-// is just written as the first line of the message body instead.
-function sendNtfyBeacon(message) {
-  try {
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon(`https://ntfy.sh/${NTFY_TOPIC}`, message);
-    }
-  } catch (e) {
-    // fail silently
-  }
-}
-
-function getDeviceLabel() {
-  const ua = navigator.userAgent;
-  let device = 'Unknown device';
-  if (/iPad/.test(ua)) device = 'iPad';
-  else if (/iPhone/.test(ua)) device = 'iPhone';
-  else if (/Android/.test(ua)) device = 'Android';
-  else if (/Macintosh/.test(ua)) device = 'Mac';
-  else if (/Windows/.test(ua)) device = 'Windows PC';
-
-  let browser = 'Unknown browser';
-  if (/Edg\//.test(ua)) browser = 'Edge';
-  else if (/Chrome\//.test(ua) && !/Edg\//.test(ua)) browser = 'Chrome';
-  else if (/Firefox\//.test(ua)) browser = 'Firefox';
-  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = 'Safari';
-
-  return `${device} · ${browser}`;
-}
-
-// Filled in once the IP/location lookup below resolves, and reused by
-// both the "opened" notification and the later click-summary/share
-// notifications so they don't each need their own network request.
-FarmSmart.visitorInfo = { ip: 'unknown', location: 'unknown', device: getDeviceLabel() };
-
-function notifyAppOpened() {
-  fetch('https://ipapi.co/json/')
-    .then((res) => res.json())
-    .then((data) => {
-      FarmSmart.visitorInfo.ip = data.ip || 'unknown';
-      FarmSmart.visitorInfo.location = [data.city, data.country_name].filter(Boolean).join(', ') || 'unknown';
-    })
-    .catch(() => {
-      // Geolocation lookup failed/blocked — still send the notification
-      // below with whatever we have, rather than not sending at all.
-    })
-    .finally(() => {
-      const v = FarmSmart.visitorInfo;
-      const message = `IP: ${v.ip}\nLocation: ${v.location}\nDevice: ${v.device}\nTime: ${new Date().toLocaleString()}`;
-      sendNtfy(message, { title: '📍 FarmSmart opened', tags: 'farmer' });
-    });
-}
-
-// ---- Click tracking: logs a short label for every button tapped
-// during the visit, and sends one summary notification when the
-// person leaves (not one notification per click — that would be way
-// too noisy). Works automatically for any button with visible text or
-// an aria-label; give an element data-track="..." to override the
-// label, or data-track="skip" to exclude a very noisy element (like
-// the wheel picker's individual value rows) from being logged. ----
-FarmSmart.sessionClicks = [];
-
-// Friendly names for the ntfy click summary — keyed by each tile's
-// registerTile({id}). Falls back to the raw id for any tile added
-// later and not listed here.
-const TILE_DISPLAY_NAMES = {
-  vat: 'Milk Vat',
-  crossing: 'Road Crossing',
-  milking: 'Live Milking',
-  'milk-statement': 'Milk Statement',
-  gates: 'Gates',
-  roster: 'Roster',
-  timesheet: 'Timesheet',
-  'shift-clock': 'Shift Clock',
-  'daily-tasks': 'Daily Tasks',
-  'farm-plan': 'Farm Plan',
-};
-
-document.addEventListener('click', (e) => {
-  const el = e.target.closest('button, .farm-picker, .user-picker, .sheet-row');
-  if (!el) return;
-  if (el.classList.contains('wheel-item') || el.dataset.track === 'skip') return;
-
-  const label = el.dataset.track || el.getAttribute('aria-label') || el.textContent.trim().replace(/\s+/g, ' ').slice(0, 60);
-  if (!label) return;
-
-  const tileEl = el.closest('[data-tile-name]');
-  const tileName = tileEl ? (TILE_DISPLAY_NAMES[tileEl.dataset.tileName] || tileEl.dataset.tileName) : null;
-  FarmSmart.sessionClicks.push(tileName ? `${tileName}: ${label}` : label);
-});
-
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'hidden' || FarmSmart.sessionClicks.length === 0) return;
-  const v = FarmSmart.visitorInfo;
-  const list = FarmSmart.sessionClicks.map((label, i) => `${i + 1}. ${label}`).join('\n');
-  sendNtfyBeacon(`🖱 FarmSmart session activity\nIP: ${v.ip} · ${v.location}\n\n${list}`);
-  FarmSmart.sessionClicks = []; // avoid sending the same clicks twice if visibility toggles more than once
-});
-
-document.addEventListener('DOMContentLoaded', notifyAppOpened);
-
-// ---- "Share the app" button ----
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('shareAppBtn').addEventListener('click', async () => {
-    // IMPORTANT: navigator.share() must run FIRST, with nothing async
-    // before it — some mobile browsers require a share() call to
-    // happen as a direct, immediate result of the tap. Even a
-    // non-awaited fetch() call (like the ntfy notification below)
-    // running beforehand can be enough to lose that "user activation"
-    // context on some Android browsers, silently making share() fail
-    // or do nothing. So: share/copy first, notify after.
-    const shareData = {
-      title: 'FarmSmart',
-      text: 'Check out FarmSmart — our farm dashboard app.',
-      url: window.location.href,
-    };
-
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (e) {
-        // Person cancelled the share sheet — nothing to do.
-      }
-    } else if (navigator.clipboard) {
-      try {
-        await navigator.clipboard.writeText(shareData.url);
-        showToast('Link copied to clipboard');
-      } catch (e) {
-        showToast('Could not copy link');
-      }
-    } else {
-      showToast('Sharing not supported on this browser');
-    }
-
-    // Notified after the share attempt (not batched into the
-    // session-end summary) — the person asked to know right away when
-    // this specific button is used, regardless of what happens in the
-    // share sheet (sent, or cancelled).
-    const v = FarmSmart.visitorInfo;
-    sendNtfy(`IP: ${v.ip} · ${v.location}\nDevice: ${v.device}\nTime: ${new Date().toLocaleString()}`, {
-      title: '📤 Someone tapped "Share the app"',
-      tags: 'loudspeaker',
-    });
-  });
-});
-
-/* ---------------------------------------------------------------------
-   7. WHEEL PICKER (shared iPhone-style scroll wheel utility)
-   ---------------------------------------------------------------------
-   Any tile can use this for a scrollable, snap-to-center picker column
-   (see js/tiles/gates.js for the paddock/time picker built from it).
-
-   FarmSmart.createWheel(container, values, initialIndex) turns an
-   empty element into one wheel column: it fills it with one row per
-   value, adds top/bottom padding so the first and last values can
-   still scroll to the vertical center, and tracks which value is
-   currently centered as the user scrolls. Returns a small controller
-   object: { getValue(), getIndex(), setIndex(i) }.
-
-   IMPORTANT: the row height here (WHEEL_ROW_HEIGHT) must match
-   `.wheel-item { height: ... }` in css/tiles/gates.css — if you change
-   one, change the other, or the snap math will be off.
---------------------------------------------------------------------- */
-const WHEEL_ROW_HEIGHT = 40; // px — keep in sync with .wheel-item height in CSS
+const WHEEL_ROW_HEIGHT = 40; // px — must match .wheel-item height in css/tiles/gates.css
 
 FarmSmart.createWheel = function (container, values, initialIndex) {
   container.innerHTML = '';
   container.classList.add('wheel-col');
 
-  // Padding rows above/below so the first/last real values can be
-  // scrolled all the way to the center of the visible wheel.
-  const padTop = document.createElement('div');
-  padTop.className = 'wheel-pad';
-  container.appendChild(padTop);
-
+  // Padding rows let the first and last values reach the centre.
+  const addPadding = () => {
+    const pad = document.createElement('div');
+    pad.className = 'wheel-pad';
+    container.appendChild(pad);
+  };
+  addPadding();
   values.forEach((value, i) => {
     const item = document.createElement('div');
     item.className = 'wheel-item';
@@ -454,37 +292,25 @@ FarmSmart.createWheel = function (container, values, initialIndex) {
     item.dataset.index = i;
     container.appendChild(item);
   });
-
-  const padBottom = document.createElement('div');
-  padBottom.className = 'wheel-pad';
-  container.appendChild(padBottom);
+  addPadding();
 
   let currentIndex = initialIndex || 0;
-
-  function markSelected() {
-    container.querySelectorAll('.wheel-item').forEach((el, i) => {
-      el.classList.toggle('selected', i === currentIndex);
-    });
-  }
 
   function scrollToIndex(i, smooth) {
     currentIndex = Math.max(0, Math.min(values.length - 1, i));
     container.scrollTo({ top: currentIndex * WHEEL_ROW_HEIGHT, behavior: smooth ? 'smooth' : 'auto' });
-    markSelected();
+    container.querySelectorAll('.wheel-item').forEach((el, index) => {
+      el.classList.toggle('selected', index === currentIndex);
+    });
   }
 
-  // While scrolling/flicking, wait for it to settle (debounced) before
-  // snapping to the nearest value and reporting it as selected.
+  // Snap only once a flick has settled.
   let settleTimer = null;
   container.addEventListener('scroll', () => {
     clearTimeout(settleTimer);
-    settleTimer = setTimeout(() => {
-      const idx = Math.round(container.scrollTop / WHEEL_ROW_HEIGHT);
-      scrollToIndex(idx, true);
-    }, 120);
+    settleTimer = setTimeout(() => scrollToIndex(Math.round(container.scrollTop / WHEEL_ROW_HEIGHT), true), 120);
   });
 
-  // Tapping a value directly (instead of scrolling to it) selects it.
   container.addEventListener('click', (e) => {
     const item = e.target.closest('.wheel-item');
     if (item) scrollToIndex(parseInt(item.dataset.index, 10), true);
@@ -500,118 +326,188 @@ FarmSmart.createWheel = function (container, values, initialIndex) {
 };
 
 /* ---------------------------------------------------------------------
-   8. LIGHT / DARK THEME TOGGLE
-   ---------------------------------------------------------------------
-   Persisted per-device via localStorage (not tied to which user —
-   John/Greg — is selected). Wrapped in try/catch because localStorage
-   can throw in some sandboxed preview contexts; if it fails, the
-   toggle still works for the current session, it just won't be
-   remembered on reload.
+   7. THEME, ONLINE STATUS, DEMO BANNER
+   Theme and banner dismissal are remembered per device, not per user.
 --------------------------------------------------------------------- */
 const THEME_STORAGE_KEY = 'farmsmart-theme';
+const DEMO_BANNER_DISMISSED_KEY = 'farmsmart-demo-banner-dismissed';
 
-function getStoredTheme() {
-  try {
-    return localStorage.getItem(THEME_STORAGE_KEY);
-  } catch (e) {
-    return null;
-  }
-}
-function storeTheme(theme) {
-  try {
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-  } catch (e) {
-    // Storage unavailable — toggle still works this session, just
-    // won't persist. Not worth surfacing to the user.
-  }
-}
 function applyTheme(theme) {
-  if (theme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-    document.getElementById('themeToggleBtn').setAttribute('aria-label', 'Switch to dark mode');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-    document.getElementById('themeToggleBtn').setAttribute('aria-label', 'Switch to light mode');
-  }
+  const isLight = theme === 'light';
+  if (isLight) document.documentElement.setAttribute('data-theme', 'light');
+  else document.documentElement.removeAttribute('data-theme');
+  document.getElementById('themeToggleBtn').setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
 }
-document.addEventListener('DOMContentLoaded', () => {
-  applyTheme(getStoredTheme() || 'dark');
-  document.getElementById('themeToggleBtn').addEventListener('click', () => {
-    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    const next = isLight ? 'dark' : 'light';
-    applyTheme(next);
-    storeTheme(next);
-  });
-});
 
-/* ---------------------------------------------------------------------
-   9. ONLINE/OFFLINE STATUS
-   Useful on farms with patchy mobile signal between paddocks.
---------------------------------------------------------------------- */
+function bindThemeToggle() {
+  applyTheme(FarmSmart.storage.get(THEME_STORAGE_KEY) || 'dark');
+  document.getElementById('themeToggleBtn').addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    FarmSmart.storage.set(THEME_STORAGE_KEY, next);
+  });
+}
+
+// Useful on farms with patchy mobile signal between paddocks.
 function updateSyncStatus() {
   const pill = document.getElementById('syncPill');
-  const isOnline = navigator.onLine;
-  pill.classList.toggle('offline', !isOnline);
-  pill.querySelector('span:last-child').textContent = isOnline ? 'Synced' : 'Offline';
+  pill.classList.toggle('offline', !navigator.onLine);
+  pill.querySelector('span:last-child').textContent = navigator.onLine ? 'Synced' : 'Offline';
 }
 window.addEventListener('online', updateSyncStatus);
 window.addEventListener('offline', updateSyncStatus);
 
-/* ---------------------------------------------------------------------
-   9b. DEMO BANNER
-   ---------------------------------------------------------------------
-   Shown once above everything else (markup lives in index.html, right
-   above the header). Dismissing it hides it for the rest of this
-   browser/device via localStorage, same pattern as the theme toggle —
-   wrapped in try/catch so a blocked localStorage just means the
-   banner reappears next visit instead of breaking anything.
---------------------------------------------------------------------- */
-const DEMO_BANNER_DISMISSED_KEY = 'farmsmart-demo-banner-dismissed';
-
-document.addEventListener('DOMContentLoaded', () => {
+function bindDemoBanner() {
   const banner = document.getElementById('demoBanner');
-  if (!banner) return;
-
-  let dismissed = false;
-  try { dismissed = localStorage.getItem(DEMO_BANNER_DISMISSED_KEY) === '1'; } catch (e) { /* ignore */ }
-  if (dismissed) banner.style.display = 'none';
-
+  if (FarmSmart.storage.get(DEMO_BANNER_DISMISSED_KEY) === '1') banner.style.display = 'none';
   document.getElementById('demoBannerClose').addEventListener('click', () => {
     banner.style.display = 'none';
-    try { localStorage.setItem(DEMO_BANNER_DISMISSED_KEY, '1'); } catch (e) { /* ignore — still hidden this session */ }
+    FarmSmart.storage.set(DEMO_BANNER_DISMISSED_KEY, '1');
   });
-});
+}
 
 /* ---------------------------------------------------------------------
-   10. BOOT
-   Runs once the page (and every tile script before this point) has
-   loaded. Injects every registered tile's markup into #dashboard, in
-   registration order, then runs each tile's init().
+   8. VISITOR NOTIFICATIONS (ntfy.sh)
+   Pushes a notification to the owner's phone when someone opens the
+   app, when they tap "Share the app", and a summary of what they tapped
+   when they leave. Subscribe to NTFY_TOPIC in the ntfy app to receive
+   them; anyone who knows the topic can read it, so keep it obscure.
+   Every call fails silently: an ad blocker must never break the app.
 --------------------------------------------------------------------- */
-document.addEventListener('DOMContentLoaded', () => {
-  const dashboard = document.getElementById('dashboard');
+const NTFY_TOPIC = 'farm-smart-visits-x203xxxcv45';
+const NTFY_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
 
+function sendNtfy(message, { title = 'FarmSmart', tags = 'farmer' } = {}) {
+  try {
+    fetch(NTFY_URL, { method: 'POST', body: message, headers: { Title: title, Tags: tags } }).catch(() => {});
+  } catch (e) { /* fetch unavailable */ }
+}
+
+// sendBeacon survives the tab closing, unlike fetch. It can't set
+// headers, so the title goes in the body.
+function sendNtfyBeacon(message) {
+  try {
+    if (navigator.sendBeacon) navigator.sendBeacon(NTFY_URL, message);
+  } catch (e) { /* not sent */ }
+}
+
+function getDeviceLabel() {
+  const ua = navigator.userAgent;
+  let device = 'Unknown device';
+  if (/iPad/.test(ua)) device = 'iPad';
+  else if (/iPhone/.test(ua)) device = 'iPhone';
+  else if (/Android/.test(ua)) device = 'Android';
+  else if (/Macintosh/.test(ua)) device = 'Mac';
+  else if (/Windows/.test(ua)) device = 'Windows PC';
+
+  // Order matters: Edge's UA also says Chrome, and Chrome's says Safari.
+  let browser = 'Unknown browser';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/Chrome\//.test(ua)) browser = 'Chrome';
+  else if (/Firefox\//.test(ua)) browser = 'Firefox';
+  else if (/Safari\//.test(ua)) browser = 'Safari';
+
+  return `${device} · ${browser}`;
+}
+
+// Filled once the IP lookup resolves, then reused by every notification.
+const visitorInfo = { ip: 'unknown', location: 'unknown', device: getDeviceLabel() };
+
+function notifyAppOpened() {
+  fetch('https://ipapi.co/json/')
+    .then((res) => res.json())
+    .then((data) => {
+      visitorInfo.ip = data.ip || 'unknown';
+      visitorInfo.location = [data.city, data.country_name].filter(Boolean).join(', ') || 'unknown';
+    })
+    .catch(() => { /* lookup blocked: notify with what we have */ })
+    .finally(() => {
+      const v = visitorInfo;
+      sendNtfy(`IP: ${v.ip}\nLocation: ${v.location}\nDevice: ${v.device}\nTime: ${new Date().toLocaleString()}`, { title: '📍 FarmSmart opened' });
+    });
+}
+
+// One summary when the visitor leaves, rather than one ping per tap.
+// data-track="..." overrides a button's label, data-track="skip" hides it.
+let sessionClicks = [];
+
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('button, .farm-picker, .user-picker, .sheet-row');
+  if (!el || el.classList.contains('wheel-item') || el.dataset.track === 'skip') return;
+
+  const label = el.dataset.track || el.getAttribute('aria-label') || el.textContent.trim().replace(/\s+/g, ' ').slice(0, 60);
+  if (!label) return;
+
+  const tileEl = el.closest('[data-tile-name]');
+  sessionClicks.push(tileEl ? `${tileEl.dataset.tileName}: ${label}` : label);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'hidden' || sessionClicks.length === 0) return;
+  const list = sessionClicks.map((label, i) => `${i + 1}. ${label}`).join('\n');
+  sendNtfyBeacon(`🖱 FarmSmart session activity\nIP: ${visitorInfo.ip} · ${visitorInfo.location}\n\n${list}`);
+  sessionClicks = []; // visibility can toggle more than once
+});
+
+function bindShareButton() {
+  document.getElementById('shareAppBtn').addEventListener('click', async () => {
+    // navigator.share() must run first, with nothing async before it:
+    // some mobile browsers drop the tap's "user activation" otherwise.
+    const url = window.location.href;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'FarmSmart', text: 'Check out FarmSmart — our farm dashboard app.', url });
+      } catch (e) { /* share sheet cancelled */ }
+    } else if (navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast('Link copied to clipboard');
+      } catch (e) {
+        showToast('Could not copy link');
+      }
+    } else {
+      showToast('Sharing not supported on this browser');
+    }
+
+    const v = visitorInfo;
+    sendNtfy(`IP: ${v.ip} · ${v.location}\nDevice: ${v.device}\nTime: ${new Date().toLocaleString()}`, {
+      title: '📤 Someone tapped "Share the app"',
+      tags: 'loudspeaker',
+    });
+  });
+}
+
+/* ---------------------------------------------------------------------
+   9. BOOT
+--------------------------------------------------------------------- */
+function mountTiles() {
+  const dashboard = document.getElementById('dashboard');
   FarmSmart.tiles.forEach((tile) => {
     const childrenBefore = new Set(dashboard.children);
     dashboard.insertAdjacentHTML('beforeend', tile.html);
-    // Tag every top-level element this tile just added with its id, so
-    // click tracking (section 6) can report which tile a button
-    // belongs to. Tagging the elements directly (not wrapping them)
-    // keeps #dashboard's CSS grid children exactly as before.
+    // Tag (rather than wrap) the tile's elements so #dashboard's grid
+    // layout is untouched; click tracking reads the tag.
     Array.from(dashboard.children).forEach((child) => {
-      if (!childrenBefore.has(child)) child.dataset.tileName = tile.id;
+      if (!childrenBefore.has(child)) child.dataset.tileName = tile.name;
     });
-    // try/catch: one broken tile must never stop the tiles after it
-    // from mounting — log the error and carry on with the next one.
+    // One broken tile must not stop the ones after it from mounting.
     try {
-      if (typeof tile.init === 'function') tile.init();
+      if (tile.init) tile.init();
     } catch (err) {
       console.error(`[FarmSmart] Tile "${tile.id}" failed to start:`, err);
     }
   });
+}
 
-  // Initial paint of header state.
-  document.getElementById('activeFarmName').textContent =
-    FARMS.find((f) => f.id === FarmSmart.activeFarmId).name;
+document.addEventListener('DOMContentLoaded', () => {
+  farmSheet = FarmSmart.createPanel('farmSheetMask');
+  userSheet = FarmSmart.createPanel('userSheetMask');
+  bindConfirmDialog();
+  notifyAppOpened();
+  bindShareButton();
+  bindThemeToggle();
+  bindDemoBanner();
+  mountTiles();
+  document.getElementById('activeFarmName').textContent = FarmSmart.getActiveFarm().name;
   updateSyncStatus();
 });

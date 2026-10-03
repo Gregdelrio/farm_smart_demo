@@ -1,24 +1,13 @@
 /* =====================================================================
    TILE: ROAD CROSSING
-   ---------------------------------------------------------------------
-   TO DISABLE THIS TILE: comment out (or delete) in index.html:
-     <link rel="stylesheet" href="css/tiles/crossing.css">
-     <script src="js/tiles/crossing.js"></script>
-
-   DESIGN NOTES:
-   - There's only a warning light at this crossing, no physical gate —
-     so there's no lights/gate toggle row.
-   - The road name shown under the button comes from the active farm
-     (js/core.js FARMS[].roadName) and updates on farmsmart:farmchanged.
-   - No badge, no explanatory hint text under the button — the button
-     itself (yellow = idle, blinking orange = active) carries the
-     status.
-   - Confirmation dialogs are deliberately minimal: just "Start/Stop
-     crossing sequence?", no extra sentence.
+   The crossing only has a warning light, no gate. The big button
+   itself carries the status (yellow = idle, blinking orange = active);
+   the road name below follows the active farm.
    ===================================================================== */
 
 FarmSmart.registerTile({
   id: 'crossing',
+  name: 'Road Crossing',
 
   html: `
     <div class="card">
@@ -37,35 +26,36 @@ FarmSmart.registerTile({
   `,
 
   init: function () {
-    let crossingActive = false;
+    let isActive = false;
     let elapsedBaseMinutes = 0;
     let elapsedStartedAt = 0;
     let elapsedTimer = null;
 
     function updateRoadLabel() {
-      const farm = FarmSmart.getActiveFarm();
-      document.getElementById('crossingRoadLabel').textContent = farm.roadName;
+      document.getElementById('crossingRoadLabel').textContent = FarmSmart.getActiveFarm().roadName;
     }
 
     function renderElapsed() {
       const label = document.getElementById('crossingElapsedLabel');
-      const extraMinutes = Math.floor((Date.now() - elapsedStartedAt) / 60000);
-      const totalMinutes = elapsedBaseMinutes + extraMinutes;
+      const totalMinutes = elapsedBaseMinutes + Math.floor((Date.now() - elapsedStartedAt) / 60000);
       label.textContent = `Crossing initiated since ${totalMinutes} min`;
       label.style.display = 'block';
     }
 
+    function setActive(active) {
+      isActive = active;
+      document.getElementById('crossingBtn').classList.toggle('active', active);
+      document.getElementById('crossingIcon').className = active ? 'ti ti-player-stop' : 'ti ti-player-play';
+      document.getElementById('crossingLine1').textContent = active ? 'STOP' : 'START';
+      document.getElementById('crossingSimulateBtn').innerHTML = active
+        ? '<i class="ti ti-player-stop"></i>Stop simulating'
+        : '<i class="ti ti-repeat"></i>Simulate crossing';
+      showToast(active ? 'Crossing sequence started' : 'Crossing sequence ended');
+    }
+
     function startCrossing() {
-      crossingActive = true;
-      document.getElementById('crossingBtn').classList.add('active');
-      document.getElementById('crossingIcon').className = 'ti ti-player-stop';
-      document.getElementById('crossingLine1').textContent = 'STOP';
-      showToast('Crossing sequence started');
-
-      document.getElementById('crossingSimulateBtn').innerHTML = '<i class="ti ti-player-stop"></i>Stop simulating';
-
-      // Backdate the start slightly so the demo doesn't always show
-      // "since 0 min" the instant a crossing kicks off.
+      setActive(true);
+      // Backdated a little so the demo doesn't always read "since 0 min".
       elapsedBaseMinutes = 1 + Math.floor(Math.random() * 5);
       elapsedStartedAt = Date.now();
       renderElapsed();
@@ -73,35 +63,20 @@ FarmSmart.registerTile({
     }
 
     function endCrossing() {
-      crossingActive = false;
-      document.getElementById('crossingBtn').classList.remove('active');
-      document.getElementById('crossingIcon').className = 'ti ti-player-play';
-      document.getElementById('crossingLine1').textContent = 'START';
-      showToast('Crossing sequence ended');
-
-      document.getElementById('crossingSimulateBtn').innerHTML = '<i class="ti ti-repeat"></i>Simulate crossing';
-
-      if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+      setActive(false);
+      clearInterval(elapsedTimer);
       document.getElementById('crossingElapsedLabel').style.display = 'none';
     }
 
     document.getElementById('crossingBtn').addEventListener('click', () => {
-      if (crossingActive) {
-        openConfirm('Stop crossing sequence?', '', 'Stop', endCrossing);
-      } else {
-        openConfirm('Start crossing sequence?', '', 'Start', startCrossing);
-      }
+      if (isActive) openConfirm('Stop crossing sequence?', '', 'Stop', endCrossing);
+      else openConfirm('Start crossing sequence?', '', 'Start', startCrossing);
     });
 
-    // Simulate crossing: skips the confirm dialog and goes straight to
-    // whatever pressing the real button + confirming OK would do —
-    // handy for demos so you don't have to explain the confirm step.
+    // Demo shortcut: same as the button, without the confirmation step.
     document.getElementById('crossingSimulateBtn').addEventListener('click', () => {
-      if (crossingActive) {
-        endCrossing();
-      } else {
-        startCrossing();
-      }
+      if (isActive) endCrossing();
+      else startCrossing();
     });
 
     document.addEventListener('farmsmart:farmchanged', updateRoadLabel);

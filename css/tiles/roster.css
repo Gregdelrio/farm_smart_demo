@@ -1,11 +1,4 @@
-/* =====================================================================
-   TILE: FARM ROSTER
-   ---------------------------------------------------------------------
-   Everyone (John, Greg) sees the same weekly grid; only Owner-role
-   users get the edit controls (Generate, Clear, Manage Employees,
-   Farm Staffing) and can tap a cell to change it — see the role check
-   in js/tiles/roster.js init().
-   ===================================================================== */
+/* TILE: FARM ROSTER — see js/tiles/roster.js */
 
 .roster-week-nav { display: flex; align-items: center; justify-content: center; gap: 3cqw; margin: 0 1.5rem 1vh; }
 .roster-week-label { font-size: 3.4cqw; color: var(--text-secondary); font-weight: 600; margin: 0 0 2vh; }
@@ -25,7 +18,8 @@
   margin: 0 1.5rem 1.5rem; padding: 1vh 0;
 }
 
-.roster-action-row { display: flex; flex-wrap: wrap; gap: 2cqw; margin-top: 2vh; }
+.roster-overlay-section { margin: 0 1.5rem 2rem; }
+.roster-action-row { display: flex; flex-wrap: wrap; gap: 2cqw; margin: 0 1.5rem 2rem; }
 .roster-action-row .card-btn { flex: 1; min-width: 40%; margin-top: 0; }
 
 /* ---- The grid itself ---- */
@@ -85,6 +79,7 @@
 .roster-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0 1.5rem 1.5rem; }
 .roster-legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; }
 .roster-legend-swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+.roster-legend-swatch--off { background: var(--bg-card-alt); border: 1px dashed var(--text-faint); }
 
 /* ---- Cell-edit sheet: a colored row per farm + Day Off + Clear ---- */
 .roster-option-row {
@@ -145,10 +140,8 @@
 .roster-chip.active { border-color: transparent; color: #fff; }
 .roster-chip.active .roster-legend-swatch { opacity: 1; }
 
-/* "Try to fit at least 1 day off together" — the heart lights up red
-   when the couple day-off toggle is on, instead of relying on the
-   generic white-on-card `.active` look above (which barely reads on
-   a chip with no swatch/background of its own). */
+/* The couple chip has no swatch, so the generic `.active` look barely
+   reads on it: its heart lights up red instead. */
 #rosterCoupleDayOffChip i { color: var(--text-muted); transition: color 0.15s; }
 #rosterCoupleDayOffChip.active { background: var(--color-red-bg); border-color: transparent; color: var(--color-red); }
 #rosterCoupleDayOffChip.active i { color: var(--color-red); }
@@ -166,22 +159,6 @@
   display: flex; align-items: center; justify-content: center;
 }
 .roster-stepper__value { font-size: 1.1rem; font-weight: 800; min-width: 1.5rem; }
-
-/* ---- Live staffing check (visible to everyone, informational) ---- */
-.roster-staffing-check {
-  margin: 0 1.5rem 1.5rem;
-  border-radius: 16px;
-  padding: 1rem 1.1rem;
-  font-size: 0.85rem;
-}
-.roster-staffing-check.ok { background: var(--color-green-bg); color: var(--color-green); }
-.roster-staffing-check.issues { background: var(--color-red-bg); color: var(--color-red); }
-.roster-staffing-check__title { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; }
-.roster-staffing-check__title i { font-size: 1.1rem; }
-.roster-staffing-check.issues .roster-staffing-check__title { margin-bottom: 0.5rem; }
-.roster-staffing-check__list { list-style: none; padding: 0; margin: 0; font-weight: 600; }
-.roster-staffing-check__list li { padding: 0.2rem 0; }
-.roster-staffing-check.neutral { background: var(--bg-card-alt); color: var(--text-secondary); }
 
 /* ---- Compact roster preview, shown directly on the dashboard card ---- */
 .roster-grid-wrap--card {
@@ -208,3 +185,11 @@
   border: 2px solid transparent;
 }
 .roster-color-swatch.active { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--bg-card); }
+
+/* ---- Sheet buttons and spacing ---- */
+.roster-sheet-btn { margin: 0.5rem 1.5rem 0; width: calc(100% - 3rem); }
+.roster-farm-save-btn { margin-bottom: 0.75rem; }
+.roster-farm-delete-btn { margin: 0 1.5rem 1rem; color: var(--color-red); }
+.roster-partner-list { margin: 0 1.5rem 1.5rem; }
+.roster-partner-list .sheet-row { margin-bottom: 0.5rem; }
+.roster-staffing-intro { margin: 1.5rem; }

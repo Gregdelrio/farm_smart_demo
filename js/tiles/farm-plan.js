@@ -19,8 +19,8 @@
      drags. Each drop re-fits the plan. The dashed line between the two
      is the remaining gap.
 
-   Relies on core.js: FarmSmart.registerTile, FarmSmart.getActiveFarm,
-   showToast, openConfirm, and the farmsmart:farmchanged event.
+   Plans are stored in Supabase (photo in Storage, rows in farm_plans,
+   farm_plan_refs, farm_plan_paddocks), shared across devices.
    ===================================================================== */
 (function () {
   'use strict';
@@ -28,9 +28,6 @@
   /* ---------------------------------------------------------------------
      CONSTANTS
   --------------------------------------------------------------------- */
-  const TILE_ID = 'farm-plan';
-  const DB_NAME = 'farmsmart-farm-plan';
-  const DB_STORE = 'plans';
   const MAX_IMG_SIDE = 2400;
   const JPEG_QUALITY = 0.85;
   const MIN_REFS = 3;
@@ -74,15 +71,9 @@
   const ESRI_MAPSERVER = 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer';
   const ESRI_META_LAYERS = 'all:5,6,7,8,9,10,11,12,13,14,15,16,17,18';
 
-  // ---- Default plan for Maguires Road Dairy ----
-  // Loaded automatically the FIRST time this farm's plan is opened and no
-  // plan has been saved yet (see loadFarm()) — after that it's just the
-  // farm's normal saved data, editable/replaceable like any other plan.
-  // The u/v (photo position) values below are ROUGH PLACEHOLDERS, spread
-  // out so the pins don't overlap — they were not precisely measured
-  // against the photo, so each one will likely need a quick drag onto
-  // its correct spot the first time the plan is viewed. lat/lng ARE the
-  // real surveyed values and don't need touching.
+  // Default plan for Maguires Road Dairy, saved the first time its plan
+  // is opened with nothing stored yet. lat/lng are surveyed; u/v (spot on
+  // the photo) are rough placeholders to be dragged into place.
   const SEED_FARM_ID = 'maguires';
   const SEED_IMAGE_URL = 'assets/seed/maguires-farm-plan.jpg';
   const SEED_REFS = [
@@ -93,7 +84,6 @@
     { name: 'Paddock 20', lat: -38.319034, lng: 142.879022, u: 0.80, v: 0.74 },
   ];
 
-  const SVG_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
   const SVG_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>';
 
   /* ---------------------------------------------------------------------
@@ -120,7 +110,7 @@
 
 <div class="overlay fp-overlay" id="fp-overlay" role="dialog" aria-modal="true" aria-labelledby="fp-ov-title">
   <div class="overlay-header">
-    <button type="button" class="close-btn" id="fp-close" aria-label="Close farm plan">${SVG_CLOSE}</button>
+    <button type="button" class="close-btn" id="fp-close" aria-label="Close farm plan">${FarmSmart.icons.close}</button>
     <div class="fp-ov-heading">
       <h1 id="fp-ov-title">Farm plan</h1>
       <span class="fp-ov-farm" id="fp-ov-farm"></span>
@@ -243,7 +233,9 @@
     source: 's2',      // 'esri' (detailed, older) | 's2' (recent, less detailed) — recent is the default
     s2Date: '',        // YYYY-MM-DD pass shown
     s2Passes: null,    // [{ date, cloud }] for the current farm, null = not loaded
-    s2PassesFor: '',   // farm key the passes were loaded for
+    s2PassesFor: '',   // farm id the passes were loaded for
+    s2Loading: '',     // farm id whose passes are being fetched
+    s2Error: '',
     esriLayer: null,
     pmap: null,        // preview map in the dashboard card
     pPlanLayer: null,
@@ -251,6 +243,8 @@
     pNeedsFit: true,   // re-centre the preview map; false once the user has panned/zoomed it themselves
     pTileKey: '',      // which tile layer is on the preview map right now ('esri' or 's2:<date>')
     pTiles: null,
+    previewSatAmount: 0.5, // preview's own plan/satellite slider — starts in the middle
+    imgUrlIsBlob: false,   // imgUrl is an object URL to revoke when replaced
     needsFit: true
   };
   let els = null;
@@ -266,10 +260,10 @@
   const hasGps = r => Number.isFinite(r.lat) && Number.isFinite(r.lng);
   const clamp01 = x => Math.min(1, Math.max(0, x));
   const avg = a => a.reduce((s, x) => s + x, 0) / a.length;
-  const farmKey = f => 'farm:' + String(f.id);
+  const currentFarmId = () => (state.farm ? state.farm.id : '');
   const newId = kind => (kind === 'ref' ? 'r_' : 'p_') + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const wrapLng = lng => ((lng + 540) % 360) - 180;
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const esc = FarmSmart.escapeHtml;
   const plural = (n, one, many) => (n === 1 ? one : many);
 
   function normalizeData(raw) {
@@ -302,11 +296,8 @@
   }
   const fmtCoord = x => (Number.isFinite(x) ? x.toFixed(6) : '');
 
-  /** Today as YYYY-MM-DD in the phone's local time (what <input type="date"> uses). */
-  function todayStr() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
+  /** Today as YYYY-MM-DD in local time, as <input type="date"> uses. */
+  const todayStr = () => FarmSmart.toDateKey(new Date());
   /** Whole days between a YYYY-MM-DD date and today, or null. */
   function daysSince(ymd) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || '')) return null;
@@ -326,16 +317,15 @@
   }
 
   function loadPrefs() {
-    try {
-      const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-      if (p.source === 'esri' || p.source === 's2') state.source = p.source;
-      state.calibOpen = typeof p.calibOpen === 'boolean' ? p.calibOpen : null;
-      state.calibSectionOpen = typeof p.calibSectionOpen === 'boolean' ? p.calibSectionOpen : null;
-      state.pdkListOpen = typeof p.pdkListOpen === 'boolean' ? p.pdkListOpen : true;
-    } catch (_) { /* private mode etc.: keep defaults */ }
+    const p = FarmSmart.storage.getJson(PREFS_KEY) || {};
+    if (p.source === 'esri' || p.source === 's2') state.source = p.source;
+    state.calibOpen = typeof p.calibOpen === 'boolean' ? p.calibOpen : null;
+    state.calibSectionOpen = typeof p.calibSectionOpen === 'boolean' ? p.calibSectionOpen : null;
+    state.pdkListOpen = typeof p.pdkListOpen === 'boolean' ? p.pdkListOpen : true;
   }
   function savePrefs() {
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify({ paddocks: state.showPaddocks, refs: state.showRefs, source: state.source, calibOpen: state.calibOpen, calibSectionOpen: state.calibSectionOpen, pdkListOpen: state.pdkListOpen })); } catch (_) {}
+    const { source, calibOpen, calibSectionOpen, pdkListOpen } = state;
+    FarmSmart.storage.setJson(PREFS_KEY, { source, calibOpen, calibSectionOpen, pdkListOpen });
   }
 
   /** Accepts "-38.3001", "−38.3001" and "-38,3001". Returns {empty} | {invalid} | {value}. */
@@ -347,18 +337,6 @@
     return { value: parseFloat(norm) };
   }
 
-  // core.js toasts are single-line (white-space: nowrap) — keep messages short.
-  function toast(msg) {
-    if (typeof showToast === 'function') showToast(msg); // eslint-disable-line no-undef
-    else console.info('[farm-plan]', msg);
-  }
-  function confirmAction(title, message, label, onConfirm) {
-    if (typeof openConfirm === 'function') openConfirm(title, message, label, onConfirm); // eslint-disable-line no-undef
-    else if (window.confirm(title + '\n\n' + message)) onConfirm();
-  }
-  function getActiveFarm() {
-    try { return FarmSmart.getActiveFarm() || null; } catch (_) { return null; } // eslint-disable-line no-undef
-  }
   function cssVar(name, fallback) {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     return v || fallback;
@@ -366,34 +344,18 @@
   function warnStorage() {
     if (storageWarned) return;
     storageWarned = true;
-    toast('Storage unavailable — not saved');
+    showToast('Storage unavailable — not saved');
   }
 
   /* ---------------------------------------------------------------------
-     SUPABASE STORAGE (shared across every device — replaces the old
-     per-device IndexedDB store below). Same get(key)/put(key,value)
-     interface as before, so nothing else in this file needed to change.
-     key is always farmKey(farm), e.g. "farm:maguires" — the farm_id is
-     read out of it. image goes into Supabase Storage as a file; the
-     3 tables just hold the row data (see the SQL from setup).
+     STORAGE (Supabase): the photo goes to Storage, the rest to three
+     tables keyed by farm_id.
   --------------------------------------------------------------------- */
-  const SUPABASE_URL = 'https://gissuvlnkztpbvghymmz.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdpc3N1dmxua3p0cGJ2Z2h5bW16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTUxMTAsImV4cCI6MjEwNTg3MTExMH0.iPshYfbWiiFNGjGQVKNxy55M5kbBci3Ti--4xbUOVM0';
   const STORAGE_BUCKET = 'farm-plan-images';
-  let supabaseClient = null;
-  function sb() {
-    if (supabaseClient) return supabaseClient;
-    if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
-      throw new Error('supabase-js not loaded — check the <script> tag in index.html');
-    }
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    return supabaseClient;
-  }
 
   const Store = {
-    async get(key) {
-      const farmId = key.replace(/^farm:/, '');
-      const client = sb();
+    async get(farmId) {
+      const client = FarmSmart.supabase();
 
       const [{ data: planRow, error: planErr }, { data: refRows, error: refErr }, { data: pdkRows, error: pdkErr }] = await Promise.all([
         client.from('farm_plans').select('*').eq('farm_id', farmId).maybeSingle(),
@@ -417,9 +379,8 @@
       };
     },
 
-    async put(key, value) {
-      const farmId = key.replace(/^farm:/, '');
-      const client = sb();
+    async put(farmId, value) {
+      const client = FarmSmart.supabase();
 
       // Only re-upload if the image actually changed (a Blob means new/changed;
       // an unchanged plan still carries its existing URL string through here).
@@ -459,41 +420,6 @@
   };
 
   /* ---------------------------------------------------------------------
-     INDEXEDDB STORAGE (kept, unused, in case Supabase needs to be rolled
-     back — the block above is what's actually wired up now)
-  --------------------------------------------------------------------- */
-  const LegacyIndexedDbStore = {
-    db: null,
-    open() {
-      if (this.db) return Promise.resolve(this.db);
-      if (!('indexedDB' in window)) return Promise.reject(new Error('no indexedDB'));
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 1);
-        req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
-        req.onsuccess = () => { this.db = req.result; resolve(this.db); };
-        req.onerror = () => reject(req.error);
-      });
-    },
-    async get(key) {
-      const db = await this.open();
-      return new Promise((resolve, reject) => {
-        const r = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(key);
-        r.onsuccess = () => resolve(r.result || null);
-        r.onerror = () => reject(r.error);
-      });
-    },
-    async put(key, value) {
-      const db = await this.open();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(DB_STORE, 'readwrite');
-        tx.objectStore(DB_STORE).put(value, key);
-        tx.oncomplete = () => resolve();
-        tx.onerror = tx.onabort = () => reject(tx.error);
-      });
-    }
-  };
-
-  /* ---------------------------------------------------------------------
      GEOMETRY: plan (pixels) <-> GPS
      GPS is projected into a local flat grid in metres around the centre
      of the reference points (plenty accurate at farm scale), so gaps
@@ -508,11 +434,6 @@
   }
   function fromLocal(E, N, o) {
     return { lat: o.lat + N / M_PER_DEG_LAT, lng: o.lng + E / (M_PER_DEG_LNG * Math.cos(rad(o.lat))) };
-  }
-  function distanceKm(a, b) {
-    const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
-    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
-    return 12742 * Math.asin(Math.sqrt(h));
   }
 
   /**
@@ -691,7 +612,6 @@
      INIT + PER-FARM LOADING
   --------------------------------------------------------------------- */
   function init() {
-    if (els) return; // core.js mounts each tile once
     const q = id => document.getElementById(id);
     const overlay = q('fp-overlay');
     els = {
@@ -722,7 +642,7 @@
     // core.js dispatches this on `document`.
     document.addEventListener('farmsmart:farmchanged', e => loadFarm(e.detail && e.detail.farm));
     document.addEventListener('keydown', onGlobalKeydown);
-    loadFarm(getActiveFarm());
+    loadFarm(FarmSmart.getActiveFarm());
   }
 
   function bindEvents() {
@@ -758,7 +678,7 @@
       if (state.pPlanLayer) state.pPlanLayer.setOpacity(1 - state.previewSatAmount);
     });
     // A locked slider can't be moved, so explain why when it's touched.
-    els.poCtl.addEventListener('click', () => { if (els.poRange.disabled) toast(`Needs ${MIN_REFS} GPS points first`); });
+    els.poCtl.addEventListener('click', () => { if (els.poRange.disabled) showToast(`Needs ${MIN_REFS} GPS points first`); });
 
     els.calibDetails.addEventListener('toggle', () => {
       const open = els.calibDetails.open;
@@ -823,7 +743,7 @@
 
     let raw = null;
     if (state.farm) {
-      try { raw = await Store.get(farmKey(state.farm)); } catch (_) { warnStorage(); }
+      try { raw = await Store.get(state.farm.id); } catch (_) { warnStorage(); }
     }
     if (token !== loadToken) return; // another farm was picked in the meantime
 
@@ -834,12 +754,12 @@
     if (!raw && state.farm && state.farm.id === SEED_FARM_ID) {
       try {
         raw = await buildSeedData();
-        await Store.put(farmKey(state.farm), { ...raw, updatedAt: Date.now() });
+        await Store.put(state.farm.id, raw);
         if (token !== loadToken) return;
-        toast('Default farm plan loaded — drag each pin onto its exact spot');
+        showToast('Default farm plan loaded — drag each pin onto its exact spot');
       } catch (err) {
         console.error('[farm-plan] seed load failed:', err);
-        toast('Default farm plan couldn\u2019t be loaded — check console, or upload one manually');
+        showToast('Default farm plan couldn\u2019t be loaded — check console, or upload one manually');
         raw = null; // fall back to an empty plan, same as before this feature existed
       }
     }
@@ -856,10 +776,7 @@
   function persist() {
     if (!state.farm) return;
     const d = state.data;
-    Store.put(farmKey(state.farm), {
-      image: d.image, imgW: d.imgW, imgH: d.imgH,
-      paddocks: d.paddocks, refs: d.refs, updatedAt: Date.now()
-    }).catch(warnStorage);
+    Store.put(state.farm.id, d).catch(warnStorage);
   }
 
   function setImageUrl() {
@@ -887,7 +804,7 @@
       if (!state.pick) {
         // Deferred so it wins over the action's own toast ("Saved", "Deleted"…).
         const msg = isAligned() ? 'Aligned — satellite unlocked' : 'Need 3 GPS points for satellite';
-        setTimeout(() => toast(msg), 0);
+        setTimeout(() => showToast(msg), 0);
       }
     }
     refreshMap();
@@ -926,8 +843,6 @@
     els.pvPoCtl.hidden = true;
     els.thumb.hidden = false;
   }
-
-  state.previewSatAmount = 0.5; // preview's own plan/satellite slider — starts in the middle
 
   async function renderPreviewMap() {
     try { await ensureLeaflet(); } catch (_) { showPreviewPhoto(); return; } // offline: photo only
@@ -991,7 +906,7 @@
   const isOverlayOpen = () => !!els && els.overlay.classList.contains('show');
 
   function openOverlay() {
-    if (!state.farm) { toast('Select a farm first'); return; }
+    if (!state.farm) { showToast('Select a farm first'); return; }
     els.overlay.classList.add('show');
     els.overlay.scrollTop = 0;
     state.needsFit = true;
@@ -1285,7 +1200,7 @@
   function onReplaceClick() {
     const d = state.data;
     if (!d.paddocks.length && !d.refs.length) { els.file.click(); return; }
-    confirmAction(
+    openConfirm(
       'Replace the plan photo?',
       'Paddocks and reference points keep their relative position on the new photo. If the framing is different, drag them back into place afterwards.',
       'Choose photo',
@@ -1295,7 +1210,7 @@
 
   async function onFileChosen(file) {
     if (!file) return;
-    if (file.type && !/^image\//.test(file.type)) { toast('Choose an image file'); return; }
+    if (file.type && !/^image\//.test(file.type)) { showToast('Choose an image file'); return; }
     const farm = state.farm;
     if (!farm) return;
     try {
@@ -1305,14 +1220,13 @@
       state.data.imgW = w;
       state.data.imgH = h;
       setImageUrl();
-      state.zoomIdx = 0;
       state.pNeedsFit = true;
       persist();
       afterDataChange();
       if (isOverlayOpen()) renderOverlay();
-      toast('Plan photo saved');
+      showToast('Plan photo saved');
     } catch (_) {
-      toast('Could not read this image');
+      showToast('Could not read this image');
     }
   }
 
@@ -1544,12 +1458,12 @@
     if (ed.kind === 'ref' && hasGps(item)) {
       const farm = state.farm;
       if (farm && Number.isFinite(farm.lat) && Number.isFinite(farm.lng)) {
-        const km = distanceKm(farm, item);
-        if (km > FAR_FROM_FARM_KM) { toast(`Check coords: ${Math.round(km)} km from farm`); return; }
+        const km = FarmSmart.distanceKm(farm, item);
+        if (km > FAR_FROM_FARM_KM) { showToast(`Check coords: ${Math.round(km)} km from farm`); return; }
       }
       if (prevStatus !== 'ok' && state.calib.status === 'ok') return; // afterDataChange already said so
     }
-    toast(ed.isNew ? (ed.kind === 'ref' ? 'Reference point placed' : 'Paddock placed') : 'Saved');
+    showToast(ed.isNew ? (ed.kind === 'ref' ? 'Reference point placed' : 'Paddock placed') : 'Saved');
   }
 
   function deleteEditing() {
@@ -1558,7 +1472,7 @@
     const item = findItem(ed.kind, ed.id);
     if (!item) return;
     const isRef = ed.kind === 'ref';
-    confirmAction(
+    openConfirm(
       `Delete “${item.name}”?`,
       isRef ? 'This point will no longer be used to align the plan with the satellite map.'
             : 'The marker will be removed from the plan and the satellite map.',
@@ -1570,7 +1484,7 @@
         persist();
         closeSheet();
         afterDataChange();
-        toast(isRef ? 'Reference point deleted' : 'Paddock deleted');
+        showToast(isRef ? 'Reference point deleted' : 'Paddock deleted');
       }
     );
   }
@@ -1599,7 +1513,7 @@
     renderModeUi();
     refreshMap();
     renderBanner();
-    if (ed) { showSheet(); toast('Filled from map — check & save'); }
+    if (ed) { showSheet(); showToast('Filled from map — check & save'); }
   }
 
   function cancelPick(reopen) {
@@ -1684,7 +1598,7 @@
     if (state.pick) { finishPick(e.latlng); return; }
     if (state.editing || !state.geo) return;
     const pl = state.geo.toPlan(e.latlng.lat, wrapLng(e.latlng.lng));
-    if (pl.u < 0 || pl.u > 1 || pl.v < 0 || pl.v > 1) { toast('Tap inside the plan'); return; }
+    if (pl.u < 0 || pl.u > 1 || pl.v < 0 || pl.v > 1) { showToast('Tap inside the plan'); return; }
     startCreate(pl.u, pl.v);
   }
 
@@ -1924,12 +1838,13 @@
   function renderSourceUi() {
     els.srcBtns.forEach(b => b.setAttribute('aria-checked', String(b.dataset.src === state.source)));
     const passes = state.s2Passes;
-    els.s2Box.hidden = state.source !== 's2' || (passes !== null && passes.length > 0); // only shown while loading or on error — the date itself now shows via fp-imgdate
+    // Only shown while loading or when there's no pass; the pass date itself shows in fp-imgdate.
+    els.s2Box.hidden = state.source !== 's2' || (passes !== null && passes.length > 0);
     if (state.source !== 's2') return;
-    if (passes === null) els.s2Note.textContent = '';
-    else if (!passes.length) els.s2Note.textContent = state.s2Error || `No satellite pass over the farm in the last ${S2_DAYS_BACK} days.`;
-    else els.s2Note.textContent = '';
-    scheduleImageryInfo(); // date now shows via the unified fp-imgdate, same as Detailed
+    els.s2Note.textContent = passes && !passes.length
+      ? state.s2Error || `No satellite pass over the farm in the last ${S2_DAYS_BACK} days.`
+      : '';
+    scheduleImageryInfo();
   }
 
   /** Same idea as applySource(), for the small preview map on the dashboard card. */
@@ -1938,8 +1853,8 @@
     if (!map || !window.L) return;
     let key = 'esri';
     if (state.source === 's2') {
-      const fkey = farmKey(state.farm || { id: '' });
-      if (state.s2PassesFor !== fkey) loadS2Passes(fkey); // async; renderCard() re-runs this once loaded
+      const farmId = currentFarmId();
+      if (state.s2PassesFor !== farmId) loadS2Passes(farmId); // async; renderCard() re-runs this once loaded
       else if (state.s2Date) key = 's2:' + state.s2Date;
       // else: no pass found — falls back to Esri below
     }
@@ -1958,26 +1873,21 @@
     if (!map || !window.L) { applyOpacity(); return; }
     let layer = state.esriLayer;
     if (state.source === 's2' && isAligned() && !state.pick) { // picking GPS: detailed image is better
-      const key = farmKey(state.farm || { id: '' });
-      if (state.s2PassesFor !== key) { loadS2Passes(key); layer = null; }
+      const farmId = currentFarmId();
+      if (state.s2PassesFor !== farmId) { loadS2Passes(farmId); layer = null; }
       else if (state.s2Date) layer = makeS2Layer(state.s2Date, s2LayerCacheMain);
       else layer = null;
     }
     if (layer === state.tiles) { applyOpacity(); return; }
     if (state.tiles && map.hasLayer(state.tiles)) map.removeLayer(state.tiles);
-    state.tiles = layer || state.esriLayer;
-    if (!layer && state.source === 's2') {
-      // Passes still loading (or none): keep Esri underneath meanwhile.
-      state.tiles = state.esriLayer;
-    }
+    state.tiles = layer || state.esriLayer; // passes still loading (or none): Esri meanwhile
     applyOpacity();
   }
 
   const s2LayerCacheMain = { key: '', layer: null };
   const s2LayerCachePreview = { key: '', layer: null };
   function makeS2Layer(date, cache) {
-    const key = date;
-    if (cache.key === key) return cache.layer;
+    if (cache.key === date) return cache.layer;
     const layer = window.L.tileLayer.wms(DEA_WMS, {
       layers: DEA_LAYER,
       styles: DEA_STYLE,
@@ -1993,16 +1903,16 @@
     layer.on('tileerror', () => {
       if (warned) return;
       warned = true;
-      toast('Sentinel-2 image not loading');
+      showToast('Sentinel-2 image not loading');
     });
-    cache.key = key; cache.layer = layer;
+    cache.key = date; cache.layer = layer;
     return layer;
   }
 
   /** Lists Sentinel-2 passes over the farm (last S2_DAYS_BACK days), newest first. */
-  async function loadS2Passes(key) {
-    if (state.s2Loading === key) return;
-    state.s2Loading = key;
+  async function loadS2Passes(farmId) {
+    if (state.s2Loading === farmId) return;
+    state.s2Loading = farmId;
     state.s2Passes = null;
     state.s2Error = '';
     renderSourceUi();
@@ -2041,10 +1951,10 @@
     } catch (_) {
       state.s2Error = 'Couldn’t get the list of satellite passes. Check your connection.';
     }
-    if (state.s2Loading !== key) return; // farm changed meanwhile
+    if (state.s2Loading !== farmId) return; // farm changed meanwhile
     state.s2Loading = '';
     state.s2Passes = passes;
-    state.s2PassesFor = key;
+    state.s2PassesFor = farmId;
     const clear = passes.find(p => Number.isFinite(p.cloud) && p.cloud <= S2_MAX_CLOUD_DEFAULT);
     state.s2Date = (clear || passes[0] || { date: '' }).date;
     renderSourceUi();
@@ -2142,41 +2052,9 @@
     item.v = clamp01(pl.v);
     persist();
     afterDataChange();
-    if (outside) toast('Moved back to plan edge');
-    else if (kind === 'ref' && wasAligned && isAligned()) toast(`Plan re-aligned ±${fmtM(state.calib.rms)}`);
+    if (outside) showToast('Moved back to plan edge');
+    else if (kind === 'ref' && wasAligned && isAligned()) showToast(`Plan re-aligned ±${fmtM(state.calib.rms)}`);
   }
 
-  /* ---------------------------------------------------------------------
-     PUBLIC READ-ONLY API for other tiles
-  --------------------------------------------------------------------- */
-  const api = {
-    /** Active farm's paddocks, with lat/lng when the plan is aligned. */
-    getPaddocks() {
-      const c = state.calib;
-      return state.data.paddocks.map(p => {
-        const out = {
-          id: p.id, name: p.name,
-          status: p.status, statusLabel: statusOf(p.status).label,
-          lastGrazed: p.lastGrazed || null, daysSinceGrazed: daysSince(p.lastGrazed), notes: p.notes
-        };
-        if (c.status === 'ok') Object.assign(out, c.toGPS(p.u, p.v));
-        return out;
-      });
-    },
-    getCalibrationStatus() {
-      const c = state.calib;
-      return { status: c.status, refsWithGps: c.n, rmsMetres: c.status === 'ok' ? c.rms : null };
-    },
-    computeCalibration
-  };
-
-  /* ---------------------------------------------------------------------
-     REGISTER
-  --------------------------------------------------------------------- */
-  if (typeof FarmSmart === 'undefined' || typeof FarmSmart.registerTile !== 'function') { // eslint-disable-line no-undef
-    console.error('[farm-plan] FarmSmart.registerTile not found — load core.js before this tile.');
-    return;
-  }
-  FarmSmart.farmPlan = api;                                     // eslint-disable-line no-undef
-  FarmSmart.registerTile({ id: TILE_ID, html: TILE_HTML, init }); // eslint-disable-line no-undef
+  FarmSmart.registerTile({ id: 'farm-plan', name: 'Farm Plan', html: TILE_HTML, init });
 })();

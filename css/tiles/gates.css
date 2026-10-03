@@ -1,13 +1,4 @@
-/* =====================================================================
-   TILE: PADDOCK GATES
-   ---------------------------------------------------------------------
-   Covers three things: the dashboard card itself (next scheduled gate
-   + a short list of the others), the "Timings" wheel-picker sheet
-   (date + paddock + time), and the lighter "Open Now" wheel-picker
-   sheet (paddock only). Both sheets reuse .sheet-mask/.sheet from
-   css/base.css — only the wheel/date-toggle/list styling is specific
-   to this tile.
-   ===================================================================== */
+/* TILE: PADDOCK GATES — see js/tiles/gates.js */
 
 /* ---- Dashboard card: next gate + short list ---- */
 .gate-next { background: var(--bg-card-alt); border-radius: 16px; padding: 2.5vh 4cqw; }

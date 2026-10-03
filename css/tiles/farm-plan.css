@@ -185,7 +185,6 @@
 .fp-ref-list li:last-child .row-line { border-bottom: none; }
 
 .fp-pdk-section { margin: 0 0 1vh; }
-.fp-pdk-section-title { font-weight: 800; color: var(--text-primary); margin: 0 0 0.4vh; font-size: 0.95rem; }
 
 .fp-calib-toggle {
   display: flex; align-items: center; justify-content: space-between; width: 100%;
@@ -369,7 +368,6 @@
 }
 .fp-imgdate i { font-size: 1.05rem; margin-top: 0.05rem; color: var(--accent-yellow-text); }
 .fp-imgdate strong { color: var(--text-primary); }
-.fp-imgdate-note { color: var(--text-muted); }
 
 /* Locked slider (plan not aligned yet) */
 .fp-po-ctl.locked { opacity: 0.45; }
@@ -583,7 +581,6 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 .fp-seg2 button:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
-.fp-s2-date-display { margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); }
 .fp-s2-note { margin: 0; font-size: 0.8rem; line-height: 1.45; color: var(--text-muted); }
 .fp-s2-note:empty { display: none; }
 
@@ -628,24 +625,3 @@
   border: 2px solid #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
-
-/* Small "open plan" button, shown once the preview map becomes interactive
-   (the full-card tap-to-open button steps aside so drag/pinch can reach the map) */
-.fp-preview-expand {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  z-index: 1001;
-  width: 2.25rem;
-  height: 2.25rem;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(28, 28, 26, 0.55);
-  color: #ffffff;
-  font-size: 1.1rem;
-  cursor: pointer;
-  backdrop-filter: blur(2px);
-}
-.fp-preview-expand:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }

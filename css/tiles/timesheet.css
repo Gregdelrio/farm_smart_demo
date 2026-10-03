@@ -1,14 +1,11 @@
-/* =====================================================================
-   TILE: EMPLOYEE TIMESHEET / PAYROLL
-   ---------------------------------------------------------------------
-   Only styles for markup inside this tile's card + overlay
-   (js/tiles/timesheet.js).
-   ===================================================================== */
+/* TILE: EMPLOYEE TIMESHEET — see js/tiles/timesheet.js */
 
 .ts-today-line {
   font-size: 3.4cqw; color: var(--text-secondary); font-weight: 600;
   margin: 0 0 2vh;
 }
+.ts-today-line--overlay { margin: 0 1.5rem 1.5rem; }
+.ts-employee-list { margin-bottom: 6vh; }
 
 .ts-today-list {
   display: flex; flex-direction: column; gap: 1.2vh;
