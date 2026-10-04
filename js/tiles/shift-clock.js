@@ -207,6 +207,7 @@ FarmSmart.registerTile({
           // A newer copy of the same day may have been queued meanwhile; it stays.
           outbox = outbox.filter((d) => d !== day);
           saveLocal();
+          document.dispatchEvent(new CustomEvent('farmsmart:shiftchanged', { detail: { employeeId: day.employeeId, workDate: day.dateKey } }));
         }
         renderBadge('saved');
       } catch (err) {

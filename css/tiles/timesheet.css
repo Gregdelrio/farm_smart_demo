@@ -4,8 +4,7 @@
   font-size: 3.4cqw; color: var(--text-secondary); font-weight: 600;
   margin: 0 0 2vh;
 }
-.ts-today-line--overlay { margin: 0 1.5rem 1.5rem; }
-.ts-employee-list { margin-bottom: 6vh; }
+.ts-employee-list { margin-bottom: 2vh; }
 
 .ts-today-list {
   display: flex; flex-direction: column; gap: 1.2vh;
@@ -46,3 +45,37 @@
 
 .ts-employee-shifts { padding: 0 1.5rem 1.5rem; border-top: 1px solid var(--border-divider); }
 .ts-shift-line { font-size: 0.78rem; padding: 0.6rem 0; }
+
+/* ---- Fortnight navigation ---- */
+.ts-period { display: flex; align-items: center; justify-content: space-between; gap: 3cqw; margin: 0 1.5rem 1rem; }
+.ts-period__label { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.ts-period__label span { font-size: 0.8rem; color: var(--text-muted); }
+.ts-period__btn {
+  width: 8cqw; height: 8cqw; min-width: 32px; min-height: 32px; border-radius: 50%;
+  background: var(--bg-card-alt); border: none; color: var(--text-primary); cursor: pointer;
+}
+.ts-period__btn:disabled { opacity: 0.3; cursor: default; }
+
+/* ---- Cycle counter and approval, under each employee ---- */
+.ts-employee-meta {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0 1.5rem 1rem; margin-top: -1rem; font-size: 0.75rem;
+}
+.ts-employee-meta__cycle { color: var(--text-muted); }
+.ts-tag { flex-shrink: 0; font-weight: 600; color: var(--text-secondary); }
+.ts-tag--sent { color: var(--color-green); }
+
+/* Overtime, Sunday overtime and public holiday hours */
+.ts-ot {
+  display: inline-block; padding: 0.05rem 0.4rem; border-radius: 999px;
+  background: var(--color-blue-bg); color: var(--color-blue); font-size: 0.72rem; font-weight: 700;
+}
+
+/* ---- Approve and send to Xero ---- */
+.ts-xero { margin: 0 1.5rem 6vh; }
+.ts-xero .card-btn:disabled { opacity: 0.4; cursor: default; }
+.ts-xero__status { margin-top: 0.5rem; font-size: 0.85rem; text-align: center; color: var(--text-secondary); }
+.ts-employee-summary { gap: 1rem; }
+.ts-employee-summary__today { text-align: right; line-height: 1.6; }
+.ts-shift-line { gap: 0.75rem; }
+.ts-shift-line .k { white-space: nowrap; }
