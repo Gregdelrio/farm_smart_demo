@@ -6,9 +6,9 @@
    row; each stretch of work is one `timesheet_segments` row, whose
    end_reason says what the gap after it is.
 
-   The app user is matched to a current employee by code (user 'greg'
-   is employee 'greg'). Without a match the clock still works, but only
-   on this device.
+   Clocks as the current employee whose code is
+   FarmSmart.clockingEmployeeCode (core.js) until logins exist. Without
+   a match the clock still works, but only on this device.
 
    Local first, for patchy signal: each action is saved on the phone at
    once and queued, then sent to the database. Unsent days are retried
@@ -125,7 +125,7 @@ FarmSmart.registerTile({
 
     function findEmployee() {
       const today = todayKey();
-      return employees.find((e) => e.code === FarmSmart.currentUser.id && (!e.end_date || e.end_date >= today)) || null;
+      return employees.find((e) => e.code === FarmSmart.clockingEmployeeCode && (!e.end_date || e.end_date >= today)) || null;
     }
 
     async function loadEmployees() {
@@ -143,7 +143,7 @@ FarmSmart.registerTile({
 
     /* ---------- Local copy (works offline) ---------- */
 
-    const storageKey = () => `farmsmart-shiftclock-${employee ? employee.id : 'user-' + FarmSmart.currentUser.id}`;
+    const storageKey = () => `farmsmart-shiftclock-${employee ? employee.id : 'code-' + FarmSmart.clockingEmployeeCode}`;
 
     function freshState() {
       return { dateKey: todayKey(), status: 'off', farmId: null, segments: [], checks: [] };
@@ -300,7 +300,7 @@ FarmSmart.registerTile({
       if (lastCheck) locationLine.innerHTML = locationNote(lastCheck);
       document.getElementById('scNote').textContent = employee
         ? "Uses your device's location to confirm which farm you're clocking in from."
-        : `${FarmSmart.currentUser.name} is not a current employee: this clock stays on this device and won't reach the timesheet.`;
+        : `No current employee with code "${FarmSmart.clockingEmployeeCode}": this clock stays on this device and won't reach the timesheet.`;
 
       if (state.status === 'on') {
         statusLine.textContent = `Clocked on at ${farmName(state.farmId)} since ${formatTime(last.start)}`;
@@ -428,7 +428,6 @@ FarmSmart.registerTile({
 
     window.addEventListener('online', sync);
     setInterval(sync, RETRY_MS);
-    document.addEventListener('farmsmart:userchanged', loadToday);
 
     state = freshState();
     render();

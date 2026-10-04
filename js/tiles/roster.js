@@ -1,8 +1,7 @@
 /* =====================================================================
    TILE: FARM ROSTER
-   Weekly grid of every roster employee across all farms. Roster
-   employees are workers, unrelated to the app's demo users. Everyone
-   sees the grid; only the Owner can edit it.
+   Weekly grid of every current employee across all farms. Past weeks
+   are read-only.
    Workflow: lock in constraints by tapping cells, then "Generate"
    fills only the cells still blank. Farms, employees, rules and shifts
    live in Supabase, shared across devices.
@@ -253,7 +252,7 @@
           working that day: a farm runs short rather than cancelling
           someone's day off.
      A greedy heuristic, not a solver: it produces a sensible starting
-     roster for the Owner to fine-tune by hand.
+     roster to fine-tune by hand.
   --------------------------------------------------------------------- */
   function generateRoster() {
     const offCount = (employeeId) => grid[employeeId].filter((v) => v === 'off').length;
@@ -396,7 +395,7 @@
         <button class="card-btn" id="rosterShareBtn"><i class="ti ti-share"></i>Share Roster</button>
       </div>
 
-      <div class="roster-action-row" id="rosterOwnerActions">
+      <div class="roster-action-row">
         <button class="card-btn primary" id="rosterGenerateBtn"><i class="ti ti-wand"></i>Generate Roster</button>
         <button class="card-btn" id="rosterClearBtn"><i class="ti ti-eraser"></i>Clear Roster</button>
         <button class="card-btn" id="rosterManageEmployeesBtn"><i class="ti ti-users"></i>Manage Employees</button>
@@ -525,7 +524,7 @@
   function init() {
     const $ = (id) => document.getElementById(id);
     const isPastWeek = () => weekOffset < 0;
-    const canEdit = () => FarmSmart.isOwner() && !isPastWeek();
+    const canEdit = () => !isPastWeek();
 
     const cellSheet = FarmSmart.createPanel('rosterCellSheetMask', 'rosterCellSheetBackBtn');
     const employeesSheet = FarmSmart.createPanel('rosterEmployeesSheetMask', 'rosterEmployeesSheetBackBtn');
@@ -557,7 +556,7 @@
     }
 
     function buildGridHtml(readOnly) {
-      const disabledAttr = readOnly || !FarmSmart.isOwner() ? 'disabled' : '';
+      const disabledAttr = readOnly ? 'disabled' : '';
       let html = '<div class="roster-grid-cell roster-corner roster-name-cell">Employee</div>';
       weekDates().forEach((date, i) => {
         html += `<div class="roster-grid-cell roster-day-header"><span class="dow">${DAY_LABELS[i]}</span><span class="dom">${date.getDate()}/${date.getMonth() + 1}</span></div>`;
@@ -907,11 +906,6 @@
       if (weekOffset !== 0) goToWeek(0);
     }
 
-    function applyRolePermissions() {
-      $('rosterOwnerActions').style.display = FarmSmart.isOwner() ? 'flex' : 'none';
-      renderGrid();
-    }
-
     /* ---- Share: draws the grid on a canvas rather than screenshotting
        the DOM, whose horizontal scroll would clip the weekend. Open to
        everyone: sharing a snapshot isn't an edit. ---- */
@@ -1067,9 +1061,8 @@
     $('rosterAddEmployeeBtn').addEventListener('click', () => openEmployeeForm(null));
     $('rosterStaffingBtn').addEventListener('click', openStaffingSheet);
     $('rosterAddFarmBtn').addEventListener('click', () => openFarmForm(null));
-    document.addEventListener('farmsmart:userchanged', applyRolePermissions);
 
-    applyRolePermissions();
+    renderGrid();
     renderLegend();
     renderWeekLabel();
 

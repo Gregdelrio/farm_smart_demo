@@ -113,21 +113,6 @@ FarmSmart.createPanel = function (panelId, backButtonId) {
   return { open, close };
 };
 
-FarmSmart.isOwner = function () {
-  return FarmSmart.currentUser.role === 'Owner';
-};
-
-/** Hides a tile entirely (and closes its overlay) for anyone but the Owner. */
-FarmSmart.restrictToOwner = function (cardId, overlayId) {
-  function apply() {
-    const isOwner = FarmSmart.isOwner();
-    document.getElementById(cardId).style.display = isOwner ? '' : 'none';
-    if (!isOwner) document.getElementById(overlayId).classList.remove('show');
-  }
-  document.addEventListener('farmsmart:userchanged', apply);
-  apply();
-};
-
 /** Stand-in for a real sensor's last-sync time: random 1–10 min. */
 FarmSmart.randomSyncLabel = function () {
   const minutes = 1 + Math.floor(Math.random() * 10);
@@ -256,34 +241,11 @@ function onFarmTapped(farm) {
 }
 
 /* ---------------------------------------------------------------------
-   4. USERS + USER SWITCHER
-   Tiles read FarmSmart.isOwner() to restrict what an Employee sees.
+   4. CLOCKING EMPLOYEE
+   One view for everyone, no logins yet. Shift Clock clocks as the
+   employee with this code until each person has their own login.
 --------------------------------------------------------------------- */
-const USERS = [
-  { id: 'john', name: 'John', role: 'Owner', initials: 'J' },
-  { id: 'greg', name: 'Greg', role: 'Employee', initials: 'G' },
-];
-FarmSmart.currentUser = USERS[0];
-
-let userSheet = null;
-
-function openUserSheet() {
-  renderSheetRows('userList', USERS, FarmSmart.currentUser.id, (user) => user.role, onUserTapped);
-  userSheet.open();
-}
-
-function onUserTapped(user) {
-  userSheet.close();
-  if (user.id === FarmSmart.currentUser.id) return;
-
-  // Unlike switching farms, nothing reloads here, so no confirmation.
-  FarmSmart.currentUser = user;
-  document.getElementById('activeUserInitials').textContent = user.initials;
-  document.getElementById('activeUserName').textContent = user.name;
-  document.getElementById('activeUserRole').textContent = user.role;
-  showToast(`Now viewing as ${user.name} (${user.role})`);
-  document.dispatchEvent(new CustomEvent('farmsmart:userchanged', { detail: { user } }));
-}
+FarmSmart.clockingEmployeeCode = 'greg';
 
 /* ---------------------------------------------------------------------
    5. CONFIRMATION DIALOG + TOAST
@@ -490,7 +452,7 @@ function notifyAppOpened() {
 let sessionClicks = [];
 
 document.addEventListener('click', (e) => {
-  const el = e.target.closest('button, .farm-picker, .user-picker, .sheet-row');
+  const el = e.target.closest('button, .farm-picker, .sheet-row');
   if (!el || el.classList.contains('wheel-item') || el.dataset.track === 'skip') return;
 
   const label = el.dataset.track || el.getAttribute('aria-label') || el.textContent.trim().replace(/\s+/g, ' ').slice(0, 60);
@@ -560,7 +522,6 @@ function mountTiles() {
 document.addEventListener('DOMContentLoaded', async () => {
   await FarmSmart.loadCompanyData();
   farmSheet = FarmSmart.createPanel('farmSheetMask');
-  userSheet = FarmSmart.createPanel('userSheetMask');
   bindConfirmDialog();
   notifyAppOpened();
   bindShareButton();

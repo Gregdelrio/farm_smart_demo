@@ -1,5 +1,5 @@
 /* =====================================================================
-   TILE: MILK STATEMENT (Owner only)
+   TILE: MILK STATEMENT
    Daily pickup figures on the card, monthly totals and payment behind
    "View details". Quality figures are the same demo values on every
    farm; volume (35 L/cow/day × herd size) and everything derived from
@@ -133,7 +133,6 @@ FarmSmart.registerTile({
     document.addEventListener('farmsmart:farmchanged', refreshForActiveFarm);
 
     refreshForActiveFarm();
-    FarmSmart.restrictToOwner('msCard', 'msDetailsOverlay');
     FarmSmart.startSyncBadge('msBadge');
     renderTrends();
   },
