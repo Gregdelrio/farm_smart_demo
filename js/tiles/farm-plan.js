@@ -74,7 +74,7 @@
   // Default plan for Maguires Road Dairy, saved the first time its plan
   // is opened with nothing stored yet. lat/lng are surveyed; u/v (spot on
   // the photo) are rough placeholders to be dragged into place.
-  const SEED_FARM_ID = 'maguires';
+  const SEED_FARM_CODE = 'maguires';
   const SEED_IMAGE_URL = 'assets/seed/maguires-farm-plan.jpg';
   const SEED_REFS = [
     { name: 'Paddock 38', lat: -38.324233, lng: 142.877854, u: 0.20, v: 0.18 },
@@ -642,7 +642,7 @@
     // core.js dispatches this on `document`.
     document.addEventListener('farmsmart:farmchanged', e => loadFarm(e.detail && e.detail.farm));
     document.addEventListener('keydown', onGlobalKeydown);
-    loadFarm(FarmSmart.getActiveFarm());
+    loadFarm(FarmSmart.getFarm(FarmSmart.activeFarmId));
   }
 
   function bindEvents() {
@@ -751,7 +751,7 @@
     // load the bundled default plan + reference points instead of an
     // empty plan. Never runs again once anything has been saved for
     // this farm (including the user clearing it back to empty).
-    if (!raw && state.farm && state.farm.id === SEED_FARM_ID) {
+    if (!raw && state.farm && state.farm.code === SEED_FARM_CODE) {
       try {
         raw = await buildSeedData();
         await Store.put(state.farm.id, raw);

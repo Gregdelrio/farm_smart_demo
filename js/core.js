@@ -142,22 +142,80 @@ FarmSmart.startSyncBadge = function (badgeId) {
 };
 
 /* ---------------------------------------------------------------------
-   3. FARMS + FARM SWITCHER
-   herdSize is used by Live Milking, roadName by Road Crossing, lat/lng
-   by Shift Clock and Farm Plan.
+   3. COMPANY, FARMS + FARM SWITCHER
+   Loaded from the `companies` and `farms` tables before any tile starts
+   (see boot), so tiles can read them synchronously. A farm's `id` is its
+   UUID, used for every database reference; `code` ('maguires') is the
+   readable name, only for per-farm defaults. herdSize is used by Live
+   Milking, roadName by Road Crossing, lat/lng by Shift Clock and Farm Plan.
 --------------------------------------------------------------------- */
-FarmSmart.farms = [
-  { id: 'laang',    name: 'Laang Farm',           meta: 'Dairy - Peter',  herdSize: 355, roadName: 'Thorburns Road', lat: -38.361, lng: 142.814 },
-  { id: 'maguires', name: 'Maguires Road Dairy',  meta: 'Dairy - John',   herdSize: 557, roadName: 'Maguires Road',  lat: -38.300, lng: 142.780 },
-  { id: 'vickers',  name: 'Vickers Road Panmure', meta: 'Dairy - Damian', herdSize: 992, roadName: 'Vickers Road',   lat: -38.333, lng: 142.733 },
-];
-FarmSmart.activeFarmId = 'maguires';
+const DEFAULT_FARM_CODE = 'maguires';
+const COMPANY_CACHE_KEY = 'farmsmart-company-cache';
+
+/** Settings of the company whose data the app shows. */
+FarmSmart.company = null;
+FarmSmart.farms = [];
+FarmSmart.activeFarmId = null;
 
 FarmSmart.getFarm = function (farmId) {
   return FarmSmart.farms.find((farm) => farm.id === farmId);
 };
+// Stand-in when no farm could be loaded (first launch without signal),
+// so tiles still render instead of failing.
+const NO_FARM = { id: null, code: '', name: 'No farm', meta: '', herdSize: 0, roadName: '', lat: null, lng: null, color: null };
+
 FarmSmart.getActiveFarm = function () {
-  return FarmSmart.getFarm(FarmSmart.activeFarmId);
+  return FarmSmart.getFarm(FarmSmart.activeFarmId) || NO_FARM;
+};
+
+function rowToCompany(row) {
+  return {
+    id: row.id, name: row.name, state: row.state, xeroTenantId: row.xero_tenant_id,
+    payAnchor: row.pay_anchor, otThresholdHours: Number(row.ot_threshold_hours), cycleDays: row.cycle_days,
+    weeklyDaysOff: row.weekly_days_off, coupleSharedDayOff: row.couple_shared_day_off,
+  };
+}
+
+function rowToFarm(row) {
+  return {
+    id: row.id, code: row.code, name: row.name,
+    meta: [row.farm_type, row.owner_first_name].filter(Boolean).join(' - '),
+    herdSize: row.herd_size || 0, roadName: row.road_name || '', lat: row.lat, lng: row.lng, color: row.color,
+  };
+}
+
+function applyCompanyData({ company, farms }) {
+  FarmSmart.company = company;
+  FarmSmart.farms = farms;
+  const defaultFarm = farms.find((farm) => farm.code === DEFAULT_FARM_CODE) || farms[0];
+  FarmSmart.activeFarmId = defaultFarm ? defaultFarm.id : null;
+}
+
+async function fetchCompanyData() {
+  const db = FarmSmart.supabase();
+  // One company for now; choosing among several comes with user accounts.
+  const { data: companyRow, error: companyError } = await db.from('companies').select('*').order('created_at').limit(1).single();
+  if (companyError) throw companyError;
+  const { data: farmRows, error: farmError } = await db.from('farms').select('*')
+    .eq('company_id', companyRow.id).eq('active', true).order('sort_order');
+  if (farmError) throw farmError;
+  return { company: rowToCompany(companyRow), farms: farmRows.map(rowToFarm) };
+}
+
+/**
+ * Loads the company and its active farms. Falls back to the copy cached
+ * on the device, so the app still opens without signal in the paddocks.
+ */
+FarmSmart.loadCompanyData = async function () {
+  try {
+    const data = await fetchCompanyData();
+    FarmSmart.storage.setJson(COMPANY_CACHE_KEY, data);
+    applyCompanyData(data);
+  } catch (err) {
+    console.error('[FarmSmart] Could not load company and farms, using the cached copy:', err);
+    const cached = FarmSmart.storage.getJson(COMPANY_CACHE_KEY);
+    if (cached) applyCompanyData(cached);
+  }
 };
 
 /** Fills a switcher sheet with one row per item, marking the active one. */
@@ -499,7 +557,8 @@ function mountTiles() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await FarmSmart.loadCompanyData();
   farmSheet = FarmSmart.createPanel('farmSheetMask');
   userSheet = FarmSmart.createPanel('userSheetMask');
   bindConfirmDialog();

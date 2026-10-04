@@ -56,7 +56,7 @@ FarmSmart.registerTile({
     }
 
     function renderRandomStats() {
-      const speedRange = MILKING_SPEED_RANGES[FarmSmart.activeFarmId] || DEFAULT_MILKING_SPEED_RANGE;
+      const speedRange = MILKING_SPEED_RANGES[FarmSmart.getActiveFarm().code] || DEFAULT_MILKING_SPEED_RANGE;
       document.getElementById('milkSpeed').textContent = Math.round(randomBetween(speedRange)) + '/hr';
       document.getElementById('milk2trPct').textContent = randomBetween(TWO_TR_RANGE).toFixed(1) + '%';
     }

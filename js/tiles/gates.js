@@ -161,7 +161,7 @@ FarmSmart.registerTile({
     function buildPaddockWheels(containerId) {
       const container = document.getElementById(containerId);
       container.innerHTML = '<div class="wheel-highlight"></div>';
-      const config = PADDOCK_WHEELS[FarmSmart.activeFarmId];
+      const config = PADDOCK_WHEELS[FarmSmart.getActiveFarm().code];
       return (config ? config.wheels : []).map((values) => {
         const col = document.createElement('div');
         container.appendChild(col);
@@ -171,7 +171,7 @@ FarmSmart.registerTile({
 
     function selectedPaddockCode(wheels) {
       const values = wheels.map((wheel) => wheel.getValue());
-      const config = PADDOCK_WHEELS[FarmSmart.activeFarmId];
+      const config = PADDOCK_WHEELS[FarmSmart.getActiveFarm().code];
       return config ? config.toCode(values) : values.join('');
     }
 

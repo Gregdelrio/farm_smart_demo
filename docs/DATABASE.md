@@ -53,7 +53,7 @@ Source: [001_simplified_schema.sql](../supabase/migrations/001_simplified_schema
 | `classification` | Award level (FLH1) |
 | `xero_employee_id` | Their Xero id, unique |
 | `app_role` | Role in the app (kept from the old table) |
-| `start_date` | First day |
+| `start_date` | First day; today by default |
 | `end_date` | Last day worked; empty = still employed. Check: after `start_date` |
 | `cycle_start` | A Monday that starts their 4-week overtime cycle |
 | `sort_order` | Display order |
@@ -97,8 +97,9 @@ PK = employee + day: one assignment per person per day.
 | `shift_id` | FK → timesheet_shifts: the day it belongs to |
 | `start_time` | Start of the stretch |
 | `end_time` | End of the stretch; empty = still working. Check: after the start |
+| `end_reason` | Why the stretch ended: `rest_break`, `meal_break` or `end_of_day` (only accepted values). Empty only while the stretch is still running |
 
-PK = day + start time. Breaks are the gaps between stretches: 04:30–10:15 then 13:00–16:20 = a break from 10:15 to 13:00. A day can have only one stretch still running. Known limit: work past midnight is not supported.
+PK = day + start time. Breaks are the gaps between stretches, and `end_reason` says what kind: 04:30–10:15 (`meal_break`) then 13:00–16:20 (`end_of_day`) = a meal break from 10:15 to 13:00. Under the Pastoral Award (clause 12), the 10-minute morning rest break is paid and the meal break is unpaid. A day can have only one stretch still running. Imported hours have their gaps recorded as meal breaks. Known limit: work past midnight is not supported.
 
 ### timesheet_approvals: approved fortnights
 | Column | Meaning |

@@ -20,23 +20,6 @@
   const SAVE_ERROR_MESSAGE = 'Could not save — check your connection';
   const LOAD_ERROR_MESSAGE = 'Could not load roster — check your connection';
 
-  // Shown until Supabase answers, and kept if it can't be reached. Never
-  // written to the database.
-  const SEED_FARMS = [
-    { id: 'laang',    name: 'Laang Farm',          company: 'Moloney Sharefarming Trust', color: '#2A9D8F', min: 1, ideal: 1, max: 1, exemptFromMinimumGuarantee: true },
-    { id: 'vickers',  name: 'Vickers Road Panmure', company: 'Moloney Sharefarming Trust', color: '#8B5FBF', min: 2, ideal: 2, max: 3 },
-    { id: 'maguires', name: 'Maguires Road Dairy',  company: 'Moloney Sharefarming Trust', color: '#E8792E', min: 1, ideal: 2, max: 2 },
-  ];
-  // partnerId links a couple: the generator tries to give them a day off together.
-  const SEED_EMPLOYEES = [
-    { id: 'greg',      name: 'Greg',     trainedFarms: ['vickers'],             partnerId: 'violette' },
-    { id: 'violette',  name: 'Violette', trainedFarms: ['maguires'],            partnerId: 'greg' },
-    { id: 'lucia',     name: 'Lucia',    trainedFarms: ['vickers'],             partnerId: 'bart' },
-    { id: 'bart',      name: 'Bart',     trainedFarms: ['vickers', 'maguires'], partnerId: 'lucia' },
-    { id: 'elsep',     name: 'Else',     trainedFarms: ['vickers'],             partnerId: null },
-    { id: 'carolinas', name: 'Carolina', trainedFarms: ['laang'],               partnerId: null },
-  ];
-
   const ICON_CHEVRON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>';
   const ICON_CHEVRON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
   const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>';
@@ -46,8 +29,14 @@
   /* ---------------------------------------------------------------------
      STATE
   --------------------------------------------------------------------- */
-  let farms = SEED_FARMS.map((f) => ({ ...f }));
-  let employees = SEED_EMPLOYEES.map((e) => ({ ...e }));
+  // Ids are database UUIDs. partnerId links a couple: the generator
+  // tries to give them a day off together.
+  let farms = [];
+  let employees = [];
+  // Codes already used in the company, including retired farms and past
+  // employees: a new code must not collide with any of them.
+  let takenFarmCodes = new Set();
+  let takenEmployeeCodes = new Set();
   // `weeklyDaysOff` per employee; `coupleSharedDayOff` = try to give
   // couples at least one day off together.
   let settings = { weeklyDaysOff: 2, coupleSharedDayOff: true };
@@ -70,12 +59,13 @@
   }
   resetGrid();
 
-  /** Slug of `name` not already used as an id in `list`. */
-  function uniqueId(name, fallback, list) {
-    const base = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '');
-    let id = base || fallback;
-    for (let n = 2; list.some((item) => item.id === id); n++) id = base + n;
-    return id;
+  /** Slug of `name` not in `takenCodes`; it is added there. */
+  function uniqueCode(name, fallback, takenCodes) {
+    const base = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '') || fallback;
+    let code = base;
+    for (let n = 2; takenCodes.has(code); n++) code = base + n;
+    takenCodes.add(code);
+    return code;
   }
 
   /** Swaps the item with its neighbour (dir = -1 up, 1 down). */
@@ -116,118 +106,123 @@
 
   /* ---------------------------------------------------------------------
      PERSISTENCE (Supabase)
-     Lists are saved by deleting and re-inserting every row: simplest
-     correct sync at this scale. sort_order keeps the on-screen order,
-     which the generator also depends on.
+     Farms and employees are upserted row by row and never deleted: a
+     retired farm goes inactive, a removed employee gets an end_date, so
+     hours and pay history keep pointing at them. sort_order keeps the
+     on-screen order, which the generator also depends on.
   --------------------------------------------------------------------- */
   const db = () => FarmSmart.supabase();
+  const companyId = () => FarmSmart.company.id;
+  const nowIso = () => new Date().toISOString();
+  const todayKey = () => FarmSmart.toDateKey(new Date());
 
-  async function selectRows(query) {
+  async function execute(query) {
     const { data, error } = await query;
     if (error) throw error;
     return data;
   }
 
-  async function replaceRows(table, deleteMatching, rows) {
-    const { error: deleteError } = await deleteMatching(db().from(table).delete());
-    if (deleteError) throw deleteError;
-    if (!rows.length) return;
-    const { error: insertError } = await db().from(table).insert(rows);
-    if (insertError) throw insertError;
-  }
-  // Supabase refuses a delete without a filter; this one matches every row.
-  const everyRow = (query) => query.neq('id', '__none__');
-
   function employeeToRow(e, sortOrder) {
     return {
-      id: e.id, preferred_name: e.name,
-      trained_farms: e.trainedFarms, partner_id: e.partnerId || null,
-      company: e.company || null,
-      employment_type: e.employmentType || null, hourly_rate: e.hourlyRate || null, classification: e.classification || null,
-      xero_employee_id: e.xeroEmployeeId || null,
-      app_role: e.appRole || null,
-      sort_order: sortOrder,
+      id: e.id, company_id: companyId(), code: e.code, preferred_name: e.name,
+      partner_id: e.partnerId || null,
+      employment_type: e.employmentType || null, classification: e.classification || null,
+      xero_employee_id: e.xeroEmployeeId || null, app_role: e.appRole || null,
+      sort_order: sortOrder, updated_at: nowIso(),
     };
   }
   function rowToEmployee(r) {
-    const e = { id: r.id, name: r.preferred_name || r.id, trainedFarms: r.trained_farms || [], partnerId: r.partner_id || null };
-    if (r.company) e.company = r.company;
-    if (r.employment_type) e.employmentType = r.employment_type;
-    if (r.hourly_rate) e.hourlyRate = r.hourly_rate;
-    if (r.classification) e.classification = r.classification;
-    if (r.xero_employee_id) e.xeroEmployeeId = r.xero_employee_id;
-    if (r.app_role) e.appRole = r.app_role;
-    return e;
+    return {
+      id: r.id, code: r.code, name: r.preferred_name,
+      trainedFarms: r.employee_farms.map((link) => link.farm_id),
+      partnerId: r.partner_id,
+      employmentType: r.employment_type, classification: r.classification,
+      xeroEmployeeId: r.xero_employee_id, appRole: r.app_role,
+    };
   }
 
   function farmToRow(f, sortOrder) {
     return {
-      id: f.id, name: f.name, company: f.company || null, color: f.color,
+      id: f.id, company_id: companyId(), code: f.code, name: f.name, color: f.color,
       min_staff: f.min, ideal_staff: f.ideal, max_staff: f.max,
       exempt_from_minimum: !!f.exemptFromMinimumGuarantee,
-      sort_order: sortOrder,
+      sort_order: sortOrder, updated_at: nowIso(),
     };
   }
   function rowToFarm(r) {
     return {
-      id: r.id, name: r.name, company: r.company || undefined, color: r.color,
+      id: r.id, code: r.code, name: r.name, color: r.color,
       min: r.min_staff, ideal: r.ideal_staff, max: r.max_staff,
-      exemptFromMinimumGuarantee: !!r.exempt_from_minimum,
+      exemptFromMinimumGuarantee: r.exempt_from_minimum,
     };
   }
 
-  // An empty table means an empty list: nothing is auto-seeded.
   async function loadEmployees() {
-    const rows = await selectRows(db().from('roster_employees').select('*').order('sort_order', { ascending: true }));
-    employees = (rows || []).map(rowToEmployee);
+    const rows = await execute(db().from('employees').select('*, employee_farms(farm_id)')
+      .eq('company_id', companyId()).order('sort_order'));
+    takenEmployeeCodes = new Set(rows.map((r) => r.code));
+    const today = todayKey();
+    employees = rows.filter((r) => !r.end_date || r.end_date >= today).map(rowToEmployee);
+    // A partner who has left is no longer on the grid.
+    employees.forEach((e) => { if (e.partnerId && !getEmployee(e.partnerId)) e.partnerId = null; });
     resetGrid();
   }
   async function loadFarms() {
-    const rows = await selectRows(db().from('roster_farms').select('*').order('sort_order', { ascending: true }));
-    farms = (rows || []).map(rowToFarm);
+    const rows = await execute(db().from('farms').select('*').eq('company_id', companyId()).order('sort_order'));
+    takenFarmCodes = new Set(rows.map((r) => r.code));
+    farms = rows.filter((r) => r.active).map(rowToFarm);
   }
-  // A single row; until it exists, the defaults above apply.
   async function loadSettings() {
-    const row = await selectRows(db().from('roster_settings').select('*').eq('id', 'global').maybeSingle());
-    if (!row) return;
-    settings = {
-      weeklyDaysOff: typeof row.weekly_days_off === 'number' ? row.weekly_days_off : settings.weeklyDaysOff,
-      coupleSharedDayOff: typeof row.couple_shared_day_off === 'boolean' ? row.couple_shared_day_off : settings.coupleSharedDayOff,
-    };
+    settings = { weeklyDaysOff: FarmSmart.company.weeklyDaysOff, coupleSharedDayOff: FarmSmart.company.coupleSharedDayOff };
   }
   // Shifts are keyed by real calendar date, so a cell is the same on
-  // every device whatever week navigation led there. Blank = no row.
+  // every device whatever week navigation led there. Blank = no row,
+  // a row without farm = day off.
   async function loadGrid(offset) {
-    const dates = weekDates(offset).map(FarmSmart.toDateKey);
-    const rows = await selectRows(db().from('roster_shifts').select('*').in('work_date', dates));
     resetGrid();
-    (rows || []).forEach((row) => {
+    if (!employees.length) return;
+    const dates = weekDates(offset).map(FarmSmart.toDateKey);
+    const rows = await execute(db().from('roster_shifts').select('employee_id, work_date, farm_id')
+      .in('work_date', dates).in('employee_id', employees.map((e) => e.id)));
+    rows.forEach((row) => {
       const dayIndex = dates.indexOf(row.work_date);
-      if (grid[row.employee_id] && dayIndex !== -1) grid[row.employee_id][dayIndex] = row.assignment;
+      if (grid[row.employee_id] && dayIndex !== -1) grid[row.employee_id][dayIndex] = row.farm_id || 'off';
     });
   }
 
-  const saveEmployees = () => replaceRows('roster_employees', everyRow, employees.map(employeeToRow));
-  const saveFarms = () => replaceRows('roster_farms', everyRow, farms.map(farmToRow));
-  async function saveSettings() {
-    const { error } = await db().from('roster_settings').upsert({
-      id: 'global',
-      weekly_days_off: settings.weeklyDaysOff,
-      couple_shared_day_off: settings.coupleSharedDayOff,
-      updated_at: new Date().toISOString(),
-    });
-    if (error) throw error;
+  async function saveEmployees() {
+    if (!employees.length) return;
+    await execute(db().from('employees').upsert(employees.map(employeeToRow)));
+    const employeeIds = employees.map((e) => e.id);
+    await execute(db().from('employee_farms').delete().in('employee_id', employeeIds));
+    const links = employees.flatMap((e) => e.trainedFarms.map((farmId) => ({ employee_id: e.id, farm_id: farmId })));
+    if (links.length) await execute(db().from('employee_farms').insert(links));
   }
-  function saveGrid(offset) {
+  const endEmployment = (employeeId) =>
+    execute(db().from('employees').update({ end_date: todayKey(), updated_at: nowIso() }).eq('id', employeeId));
+  async function saveFarms() {
+    if (farms.length) await execute(db().from('farms').upsert(farms.map(farmToRow)));
+  }
+  const retireFarm = (farmId) =>
+    execute(db().from('farms').update({ active: false, updated_at: nowIso() }).eq('id', farmId));
+  const saveSettings = () => execute(db().from('companies').update({
+    weekly_days_off: settings.weeklyDaysOff,
+    couple_shared_day_off: settings.coupleSharedDayOff,
+    updated_at: nowIso(),
+  }).eq('id', companyId()));
+  // Replaces the on-screen employees' cells for that week only.
+  async function saveGrid(offset) {
+    if (!employees.length) return;
     const dates = weekDates(offset).map(FarmSmart.toDateKey);
     const rows = [];
     employees.forEach((e) => {
       dates.forEach((workDate, dayIndex) => {
-        const assignment = grid[e.id] ? grid[e.id][dayIndex] : null;
-        if (assignment) rows.push({ employee_id: e.id, work_date: workDate, assignment });
+        const value = grid[e.id] ? grid[e.id][dayIndex] : null;
+        if (value) rows.push({ employee_id: e.id, work_date: workDate, farm_id: value === 'off' ? null : value });
       });
     });
-    return replaceRows('roster_shifts', (query) => query.in('work_date', dates), rows);
+    await execute(db().from('roster_shifts').delete().in('work_date', dates).in('employee_id', employees.map((e) => e.id)));
+    if (rows.length) await execute(db().from('roster_shifts').insert(rows));
   }
 
   // Edits apply on screen instantly; saving runs in the background and
@@ -243,6 +238,8 @@
     farms: inBackground(saveFarms, 'farms'),
     settings: inBackground(saveSettings, 'roster settings'),
     grid: inBackground(() => saveGrid(weekOffset), 'roster'), // the week on screen
+    endEmployment: (employeeId) => inBackground(() => endEmployment(employeeId), 'employee')(),
+    retireFarm: (farmId) => inBackground(() => retireFarm(farmId), 'farm')(),
   };
 
   /* ---------------------------------------------------------------------
@@ -426,15 +423,8 @@
         <p class="roster-form-label">Preferred name (shown everywhere in the app)</p>
         <input type="text" class="roster-text-input" id="rosterEmployeeNameInput" placeholder="e.g. Greg">
 
-        <p class="roster-form-label">Company</p>
-        <input type="text" class="roster-text-input" id="rosterEmployeeCompanyInput" placeholder="e.g. Moloney Sharefarming Trust">
-
         <p class="roster-form-label">Award status</p>
         <div class="roster-chip-row" id="rosterEmployeeEmploymentChips">${chips('emptype', ['Casual', 'Permanent'])}</div>
-        <div id="rosterEmployeeRateRow" hidden>
-          <p class="roster-form-label">Hourly rate ($)</p>
-          <input type="number" step="0.01" min="0" class="roster-text-input" id="rosterEmployeeRateInput" placeholder="e.g. 28.50">
-        </div>
         <div id="rosterEmployeeClassRow" hidden>
           <p class="roster-form-label">Classification (dairy)</p>
           <div class="roster-chip-row" id="rosterEmployeeClassChips">
@@ -477,9 +467,6 @@
 
         <p class="roster-form-label">Farm name</p>
         <input type="text" class="roster-text-input" id="rosterFarmNameInput" placeholder="e.g. Vickers Road Panmure">
-
-        <p class="roster-form-label">Company</p>
-        <input type="text" class="roster-text-input" id="rosterFarmCompanyInput" placeholder="e.g. Moloney Sharefarming Trust">
 
         <p class="roster-form-label">Color</p>
         <div class="roster-color-row" id="rosterFarmColorChips"></div>
@@ -648,8 +635,8 @@
           employees = employees.filter((e) => e.id !== id);
           employees.forEach((e) => { if (e.partnerId === id) e.partnerId = null; });
           delete grid[id];
+          persist.endEmployment(id);
           persist.employees();
-          persist.grid();
           renderEmployeesList();
           renderGrid();
         },
@@ -661,14 +648,13 @@
     let editingFarms = [];
     let editingPartnerId = null;
     let editingEmploymentType = null; // 'casual' | 'permanent' | null
-    let editingClassification = null; // casual only
+    let editingClassification = null;
 
     function renderEmploymentChips() {
       $('rosterEmployeeEmploymentChips').querySelectorAll('.roster-chip').forEach((chip) => {
         chip.classList.toggle('active', chip.dataset.emptype === editingEmploymentType);
       });
-      $('rosterEmployeeRateRow').hidden = editingEmploymentType !== 'permanent';
-      $('rosterEmployeeClassRow').hidden = editingEmploymentType !== 'casual';
+      $('rosterEmployeeClassRow').hidden = !editingEmploymentType;
     }
     function renderClassChips() {
       $('rosterEmployeeClassChips').querySelectorAll('.roster-chip').forEach((chip) => {
@@ -722,8 +708,6 @@
 
       $('rosterEmployeeFormTitle').textContent = employee ? 'Edit Employee' : 'Add Employee';
       $('rosterEmployeeNameInput').value = employee ? employee.name : '';
-      $('rosterEmployeeCompanyInput').value = employee ? employee.company || '' : '';
-      $('rosterEmployeeRateInput').value = employee ? employee.hourlyRate || '' : '';
       renderEmploymentChips();
       renderClassChips();
       renderFarmChips();
@@ -747,15 +731,11 @@
     $('rosterEmployeeSaveBtn').addEventListener('click', () => {
       const name = $('rosterEmployeeNameInput').value.trim();
       if (!name) { showToast('Enter a name first'); return; }
-      const rate = $('rosterEmployeeRateInput').value;
-      // Casuals are paid the flat award rate, so only a Permanent
-      // employee has an hourly rate of their own.
+      // Pay rates live in Xero; the app only keeps the award status.
       const fields = {
         name,
-        company: $('rosterEmployeeCompanyInput').value.trim() || undefined,
-        employmentType: editingEmploymentType || undefined,
-        hourlyRate: editingEmploymentType === 'permanent' && rate ? Number(rate) : undefined,
-        classification: editingEmploymentType === 'casual' ? editingClassification || undefined : undefined,
+        employmentType: editingEmploymentType,
+        classification: editingEmploymentType ? editingClassification : null,
         trainedFarms: editingFarms.slice(),
       };
 
@@ -765,7 +745,7 @@
         // Unlink the previous partner before linking the new one.
         employees.forEach((e) => { if (e.partnerId === employee.id) e.partnerId = null; });
       } else {
-        employee = { id: uniqueId(name, 'employee', employees), ...fields };
+        employee = { id: crypto.randomUUID(), code: uniqueCode(name, 'employee', takenEmployeeCodes), ...fields };
         employees.push(employee);
         grid[employee.id] = Array(7).fill(null);
       }
@@ -784,6 +764,7 @@
       openConfirm('Delete this farm?', 'Employees trained on it will need reassigning, and any roster cells pointing to it will show blank.', 'Delete', () => {
         farms = farms.filter((f) => f.id !== farmId);
         employees.forEach((e) => { e.trainedFarms = e.trainedFarms.filter((id) => id !== farmId); });
+        persist.retireFarm(farmId);
         persist.farms();
         persist.employees();
         renderStaffingList();
@@ -796,7 +777,7 @@
     function renderStaffingList() {
       const el = $('rosterStaffingList');
       el.innerHTML = farms.map((f, index) => {
-        const meta = `${f.company ? f.company + ' · ' : ''}Min ${f.min} · Ideal ${f.ideal} · Max ${f.max}${f.exemptFromMinimumGuarantee ? ' · Exempt from minimum' : ''}`;
+        const meta = `Min ${f.min} · Ideal ${f.ideal} · Max ${f.max}${f.exemptFromMinimumGuarantee ? ' · Exempt from minimum' : ''}`;
         return listRowHtml({ id: f.id, index, count: farms.length, name: f.name, meta, color: f.color });
       }).join('');
 
@@ -854,7 +835,6 @@
       editingFarmStaffing = farm ? { min: farm.min, ideal: farm.ideal, max: farm.max } : { min: 1, ideal: 1, max: 2 };
       $('rosterFarmFormTitle').textContent = farm ? 'Edit Farm' : 'Add Farm';
       $('rosterFarmNameInput').value = farm ? farm.name : '';
-      $('rosterFarmCompanyInput').value = farm ? farm.company || '' : '';
       $('rosterFarmDeleteBtn').style.display = farm ? 'block' : 'none';
       renderFarmForm();
       farmForm.open();
@@ -877,13 +857,13 @@
       if (!name) { showToast('Enter a farm name first'); return; }
       const fields = {
         name,
-        company: $('rosterFarmCompanyInput').value.trim() || undefined,
         color: editingFarmColor,
         ...editingFarmStaffing,
         exemptFromMinimumGuarantee: editingFarmExempt,
       };
+      if (!(fields.min <= fields.ideal && fields.ideal <= fields.max)) { showToast('Staffing must be min ≤ ideal ≤ max'); return; }
       if (editingFarmId) Object.assign(getFarm(editingFarmId), fields);
-      else farms.push({ id: uniqueId(name, 'farm', farms), ...fields });
+      else farms.push({ id: crypto.randomUUID(), code: uniqueCode(name, 'farm', takenFarmCodes), ...fields });
 
       farmForm.close();
       persist.farms();
