@@ -172,7 +172,7 @@
     takenFarmCodes = new Set(rows.map((r) => r.code));
     farms = rows.filter((r) => r.active).map(rowToFarm);
   }
-  function loadSettings() {
+  async function loadSettings() {
     settings = { weeklyDaysOff: FarmSmart.company.weeklyDaysOff, coupleSharedDayOff: FarmSmart.company.coupleSharedDayOff };
   }
   // Shifts are keyed by real calendar date, so a cell is the same on

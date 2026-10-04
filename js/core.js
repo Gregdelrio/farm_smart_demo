@@ -160,8 +160,12 @@ FarmSmart.activeFarmId = null;
 FarmSmart.getFarm = function (farmId) {
   return FarmSmart.farms.find((farm) => farm.id === farmId);
 };
+// Stand-in when no farm could be loaded (first launch without signal),
+// so tiles still render instead of failing.
+const NO_FARM = { id: null, code: '', name: 'No farm', meta: '', herdSize: 0, roadName: '', lat: null, lng: null, color: null };
+
 FarmSmart.getActiveFarm = function () {
-  return FarmSmart.getFarm(FarmSmart.activeFarmId);
+  return FarmSmart.getFarm(FarmSmart.activeFarmId) || NO_FARM;
 };
 
 function rowToCompany(row) {
@@ -563,7 +567,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindThemeToggle();
   bindDemoBanner();
   mountTiles();
-  const activeFarm = FarmSmart.getActiveFarm();
-  document.getElementById('activeFarmName').textContent = activeFarm ? activeFarm.name : 'No farm';
+  document.getElementById('activeFarmName').textContent = FarmSmart.getActiveFarm().name;
   updateSyncStatus();
 });
