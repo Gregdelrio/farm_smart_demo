@@ -2,6 +2,8 @@
 
 > Status: planned schema, **not installed yet** on Supabase. The script runs once, at the same time as the updated tile code goes live.
 
+Backup: before changing anything, the script copies every old table untouched into a separate `backup_001` schema (not reachable from the app). Delete it with `drop schema backup_001 cascade;` once the new app has run fine for a while.
+
 Source: [001_simplified_schema.sql](../supabase/migrations/001_simplified_schema.sql). PK = primary key (what uniquely identifies a row). FK = foreign key (a column pointing to a row of another table; the database rejects a link to a row that does not exist).
 
 ## 1. Tables and columns

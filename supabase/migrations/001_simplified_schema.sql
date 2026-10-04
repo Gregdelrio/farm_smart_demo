@@ -19,6 +19,7 @@
 --   timesheet_shifts, timesheet_segments, timesheet_approvals, public_holidays,
 --   farm_plans, farm_plan_refs, farm_plan_paddocks
 -- Removed (data copied): roster_farms, roster_employees, roster_settings.
+-- Every old table is first copied as-is into the backup_001 schema.
 --
 -- DEMO ONLY: every table is open to the anon key. Close before real use
 -- (see A-FAIRE-AVANT-PRODUCTION.md).
@@ -53,6 +54,18 @@ begin
     raise exception 'A farm has staff rules out of order (min <= ideal <= max): fix them in the Roster first';
   end if;
 end $$;
+
+-- Backup: an untouched copy of every old table, outside the API-exposed
+-- public schema. To restore, copy back from backup_001; once the new app
+-- has run fine for a while: drop schema backup_001 cascade;
+create schema backup_001;
+create table backup_001.roster_farms       as table roster_farms;
+create table backup_001.roster_employees   as table roster_employees;
+create table backup_001.roster_settings    as table roster_settings;
+create table backup_001.roster_shifts      as table roster_shifts;
+create table backup_001.farm_plans         as table farm_plans;
+create table backup_001.farm_plan_refs     as table farm_plan_refs;
+create table backup_001.farm_plan_paddocks as table farm_plan_paddocks;
 
 -- These four keep their names, so the old versions step aside first.
 alter table roster_shifts      rename to old_roster_shifts;
