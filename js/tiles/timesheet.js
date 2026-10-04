@@ -1,5 +1,5 @@
 /* =====================================================================
-   TILE: EMPLOYEE TIMESHEET (Owner only)
+   TILE: EMPLOYEE TIMESHEET
    Real hours from `timesheet_shifts` and their `timesheet_segments`
    (written live by Shift Clock), one pay fortnight at a time. Hours
    only, never pay amounts: rates live in Xero.
@@ -505,7 +505,6 @@ FarmSmart.registerTile({
       }
     });
 
-    FarmSmart.restrictToOwner('tsCard', 'tsDetailsOverlay');
     document.getElementById('tsTodayLine').textContent = dayLabel(0);
 
     (async () => {
