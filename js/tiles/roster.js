@@ -1,7 +1,7 @@
 /* =====================================================================
    TILE: FARM ROSTER
    Weekly grid of every current employee across all farms. Past weeks
-   are read-only.
+   are read-only and show whoever was employed that week.
    Workflow: lock in constraints by tapping cells, then "Generate"
    fills only the cells still blank. Farms, employees, rules and shifts
    live in Supabase, shared across devices.
@@ -11,7 +11,7 @@
 
   const esc = FarmSmart.escapeHtml;
   const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const WEEKS_BACK = 4;
+  const WEEKS_BACK = 26;
   const WEEKS_FORWARD = 3;
   // Kept apart from the app's status colours (yellow, green, red, blue)
   // so a farm is never mistaken for a status.
@@ -31,7 +31,8 @@
   // Ids are database UUIDs. partnerId links a couple: the generator
   // tries to give them a day off together.
   let farms = [];
-  let employees = [];
+  let employees = []; // current staff: the ones the roster edits
+  let allEmployees = []; // everyone, including past staff, for past weeks
   // Codes already used in the company, including retired farms and past
   // employees: a new code must not collide with any of them.
   let takenFarmCodes = new Set();
@@ -52,11 +53,10 @@
   const farmInitial = (farmId) => farmName(farmId).charAt(0).toUpperCase();
   const farmColor = (farmId) => (getFarm(farmId) || {}).color || '#999';
 
-  function resetGrid() {
+  function resetGrid(offset = weekOffset) {
     grid = {};
-    employees.forEach((e) => { grid[e.id] = Array(7).fill(null); });
+    weekStaff(offset).forEach((e) => { grid[e.id] = Array(7).fill(null); });
   }
-  resetGrid();
 
   /** Slug of `name` not in `takenCodes`; it is added there. */
   function uniqueCode(name, fallback, takenCodes) {
@@ -93,6 +93,15 @@
       return date;
     });
   }
+
+  // A past week lists whoever was employed during it; this week and
+  // later list current staff.
+  function weekStaff(offset = weekOffset) {
+    if (offset >= 0) return employees;
+    const dates = weekDates(offset).map(FarmSmart.toDateKey);
+    return allEmployees.filter((e) => (!e.startDate || e.startDate <= dates[6]) && (!e.endDate || e.endDate >= dates[0]));
+  }
+  resetGrid();
 
   function shuffle(items) {
     const a = items.slice();
@@ -137,6 +146,7 @@
       partnerId: r.partner_id,
       employmentType: r.employment_type, classification: r.classification,
       xeroEmployeeId: r.xero_employee_id, appRole: r.app_role,
+      startDate: r.start_date, endDate: r.end_date,
     };
   }
 
@@ -161,7 +171,8 @@
       .eq('company_id', companyId()).order('sort_order'));
     takenEmployeeCodes = new Set(rows.map((r) => r.code));
     const today = todayKey();
-    employees = rows.filter((r) => !r.end_date || r.end_date >= today).map(rowToEmployee);
+    allEmployees = rows.map(rowToEmployee);
+    employees = allEmployees.filter((e) => !e.endDate || e.endDate >= today);
     // A partner who has left is no longer on the grid.
     employees.forEach((e) => { if (e.partnerId && !getEmployee(e.partnerId)) e.partnerId = null; });
     resetGrid();
@@ -178,11 +189,12 @@
   // every device whatever week navigation led there. Blank = no row,
   // a row without farm = day off.
   async function loadGrid(offset) {
-    resetGrid();
-    if (!employees.length) return;
+    resetGrid(offset);
+    const staff = weekStaff(offset);
+    if (!staff.length) return;
     const dates = weekDates(offset).map(FarmSmart.toDateKey);
     const rows = await execute(db().from('roster_shifts').select('employee_id, work_date, farm_id')
-      .in('work_date', dates).in('employee_id', employees.map((e) => e.id)));
+      .in('work_date', dates).in('employee_id', staff.map((e) => e.id)));
     rows.forEach((row) => {
       const dayIndex = dates.indexOf(row.work_date);
       if (grid[row.employee_id] && dayIndex !== -1) grid[row.employee_id][dayIndex] = row.farm_id || 'off';
@@ -209,9 +221,10 @@
     couple_shared_day_off: settings.coupleSharedDayOff,
     updated_at: nowIso(),
   }).eq('id', companyId()));
-  // Replaces the on-screen employees' cells for that week only.
+  // Replaces the on-screen employees' cells for that week only. Past
+  // weeks are read-only, so never saved.
   async function saveGrid(offset) {
-    if (!employees.length) return;
+    if (offset < 0 || !employees.length) return;
     const dates = weekDates(offset).map(FarmSmart.toDateKey);
     const rows = [];
     employees.forEach((e) => {
@@ -561,7 +574,7 @@
       weekDates().forEach((date, i) => {
         html += `<div class="roster-grid-cell roster-day-header"><span class="dow">${DAY_LABELS[i]}</span><span class="dom">${date.getDate()}/${date.getMonth() + 1}</span></div>`;
       });
-      employees.forEach((e) => {
+      weekStaff().forEach((e) => {
         html += `<div class="roster-grid-cell roster-name-cell">${esc(e.name)}</div>`;
         grid[e.id].forEach((value, d) => {
           const isOff = value === 'off';
@@ -923,7 +936,8 @@
       const gridWidth = nameColWidth + dayColWidth * 7;
       const width = gridWidth + padding * 2;
       const legendHeight = 20 + Math.ceil((farms.length + 1) / 2) * legendRowHeight;
-      const height = padding + headerHeight + rowHeight * employees.length + legendHeight + padding;
+      const staff = weekStaff();
+      const height = padding + headerHeight + rowHeight * staff.length + legendHeight + padding;
 
       const canvas = document.createElement('canvas');
       canvas.width = width * scale;
@@ -951,7 +965,7 @@
       });
       y += headerHeight;
 
-      employees.forEach((e, rowIndex) => {
+      staff.forEach((e, rowIndex) => {
         if (rowIndex % 2 === 1) {
           ctx.fillStyle = '#f9fafb';
           ctx.fillRect(gridLeft, y, gridWidth, rowHeight);
@@ -1066,8 +1080,8 @@
     renderLegend();
     renderWeekLabel();
 
-    // The grid loads last, once employees are known, so only current
-    // employees get their cells back.
+    // The grid loads last, once employees are known, so each employee
+    // gets their cells back.
     Promise.all([loadFarms(), loadEmployees(), loadSettings()])
       .then(() => {
         renderLegend();
