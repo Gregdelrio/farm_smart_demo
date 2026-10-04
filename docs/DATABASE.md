@@ -53,7 +53,7 @@ Source: [001_simplified_schema.sql](../supabase/migrations/001_simplified_schema
 | `classification` | Award level (FLH1) |
 | `xero_employee_id` | Their Xero id, unique |
 | `app_role` | Role in the app (kept from the old table) |
-| `start_date` | First day |
+| `start_date` | First day; today by default |
 | `end_date` | Last day worked; empty = still employed. Check: after `start_date` |
 | `cycle_start` | A Monday that starts their 4-week overtime cycle |
 | `sort_order` | Display order |

@@ -121,7 +121,7 @@ create table employees (
   classification   text,
   xero_employee_id text unique,
   app_role         text,
-  start_date       date,
+  start_date       date default current_date,
   end_date         date,                  -- last day worked; null = still employed
   cycle_start      date,                  -- a Monday that starts their 4-week overtime cycle
   sort_order       int not null default 0,
