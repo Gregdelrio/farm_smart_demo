@@ -29,7 +29,11 @@ FarmSmart.registerTile({
         <span class="badge info" id="tsBadge"></span>
       </div>
 
-      <p class="ts-today-line" id="tsTodayLine"></p>
+      <div class="ts-day-nav">
+        <button class="ts-period__btn" id="tsDayPrevBtn" aria-label="Previous day"><i class="ti ti-chevron-left"></i></button>
+        <p class="ts-today-line" id="tsTodayLine"></p>
+        <button class="ts-period__btn" id="tsDayNextBtn" aria-label="Next day"><i class="ti ti-chevron-right"></i></button>
+      </div>
 
       <div id="tsTodayList" class="ts-today-list"><p class="ts-no-past-shifts">Loading…</p></div>
 
@@ -86,6 +90,7 @@ FarmSmart.registerTile({
     let loadedFrom = null;
     let loadedTo = null;
     let fortnightOffset = 0;       // 0 = current fortnight, -1 = previous…
+    let dayOffset = 0;             // card: 0 = today, -1 = yesterday…
     let ready = false;
     const openCards = new Set();
 
@@ -272,17 +277,24 @@ FarmSmart.registerTile({
 
     /* ---------- Rendering ---------- */
 
-    function renderToday() {
-      const now = today();
-      document.getElementById('tsTodayLine').textContent = 'Today, ' + formatDate(now);
+    function dayLabel(offset) {
+      const prefix = { 0: 'Today, ', '-1': 'Yesterday, ' }[offset] || '';
+      return prefix + formatDate(addDays(today(), offset));
+    }
+
+    // Card: one day's shifts, today by default.
+    function renderDay() {
+      const date = addDays(today(), dayOffset);
+      document.getElementById('tsTodayLine').textContent = dayLabel(dayOffset);
+      document.getElementById('tsDayNextBtn').disabled = dayOffset >= 0;
       const start = fortnightStart(0);
       document.getElementById('tsBadge').textContent = `${formatShort(start)} – ${formatShort(addDays(start, FORTNIGHT_DAYS - 1))}`;
 
-      // Working today first; position alone says the rest are off.
-      const visible = employees.filter((e) => employedBetween(e, now, now) || getDay(e, now));
-      visible.sort((a, b) => (getDay(a, now) ? 0 : 1) - (getDay(b, now) ? 0 : 1));
+      // Working that day first; position alone says the rest are off.
+      const visible = employees.filter((e) => employedBetween(e, date, date) || getDay(e, date));
+      visible.sort((a, b) => (getDay(a, date) ? 0 : 1) - (getDay(b, date) ? 0 : 1));
       document.getElementById('tsTodayList').innerHTML = visible.map((employee) => {
-        const day = getDay(employee, now);
+        const day = getDay(employee, date);
         const farmBadge = day ? `<span class="ts-row__farm">${escape(farmName(day.farmId))}</span>` : '';
         const times = day ? dayParts(day, false).map((p) => `<span class="ts-row__shift">${p}</span>`).join('') : '';
         return `<div class="ts-row">
@@ -449,6 +461,18 @@ FarmSmart.registerTile({
       document.getElementById(listId).innerHTML = '<p class="ts-no-past-shifts">Could not load timesheets. Check the connection and reload.</p>';
     }
 
+    async function changeDay(delta) {
+      if (!ready) return;
+      dayOffset = Math.min(0, dayOffset + delta);
+      const date = addDays(today(), dayOffset);
+      try {
+        await loadDays(date, date);
+        renderDay();
+      } catch (err) {
+        showError('tsTodayList', err);
+      }
+    }
+
     async function changeFortnight(delta) {
       fortnightOffset = Math.min(0, fortnightOffset + delta);
       document.getElementById('tsSendStatus').textContent = '';
@@ -465,6 +489,8 @@ FarmSmart.registerTile({
     document.getElementById('tsPrevBtn').addEventListener('click', () => changeFortnight(-1));
     document.getElementById('tsNextBtn').addEventListener('click', () => changeFortnight(1));
     document.getElementById('tsSendBtn').addEventListener('click', confirmSend);
+    document.getElementById('tsDayPrevBtn').addEventListener('click', () => changeDay(-1));
+    document.getElementById('tsDayNextBtn').addEventListener('click', () => changeDay(1));
 
     // Shift Clock saved a day: re-read it and redraw.
     document.addEventListener('farmsmart:shiftchanged', async (e) => {
@@ -472,7 +498,7 @@ FarmSmart.registerTile({
       try {
         days.delete(`${e.detail.employeeId}|${e.detail.workDate}`);
         await fetchDays(parseDate(e.detail.workDate), parseDate(e.detail.workDate));
-        renderToday();
+        renderDay();
         if (document.getElementById('tsDetailsOverlay').classList.contains('show')) renderFortnight();
       } catch (err) {
         console.error('[timesheet] Could not refresh the day:', err);
@@ -480,7 +506,7 @@ FarmSmart.registerTile({
     });
 
     FarmSmart.restrictToOwner('tsCard', 'tsDetailsOverlay');
-    document.getElementById('tsTodayLine').textContent = 'Today, ' + formatDate(today());
+    document.getElementById('tsTodayLine').textContent = dayLabel(0);
 
     (async () => {
       try {
@@ -488,7 +514,7 @@ FarmSmart.registerTile({
         await loadFortnight(fortnightStart(0));
         ready = true;
         document.getElementById('tsDetailsBtn').disabled = false;
-        renderToday();
+        renderDay();
       } catch (err) {
         showError('tsTodayList', err);
       }

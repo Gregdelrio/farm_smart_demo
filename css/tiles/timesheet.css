@@ -4,6 +4,8 @@
   font-size: 3.4cqw; color: var(--text-secondary); font-weight: 600;
   margin: 0 0 2vh;
 }
+.ts-day-nav { display: flex; align-items: center; justify-content: space-between; gap: 3cqw; margin: 0 0 2vh; }
+.ts-day-nav .ts-today-line { margin: 0; flex: 1; text-align: center; }
 .ts-employee-list { margin-bottom: 2vh; }
 
 .ts-today-list {
