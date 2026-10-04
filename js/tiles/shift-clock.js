@@ -1,9 +1,10 @@
 /* =====================================================================
    TILE: SHIFT CLOCK
-   Self-service time clock: Clock On (pick a farm), meal break, Clock
-   Off, and Clock On Again later the same day (split shifts). A day is
-   one `timesheet_shifts` row; each stretch of work, from a clock on to
-   a break or clock off, is one `timesheet_segments` row.
+   Self-service time clock: Clock On (pick a farm), then Clock Off for a
+   rest break, a meal break or the end of the day, and Clock On Again
+   later the same day (split shifts). A day is one `timesheet_shifts`
+   row; each stretch of work is one `timesheet_segments` row, whose
+   end_reason says what the gap after it is.
 
    The app user is matched to a current employee by code (user 'greg'
    is employee 'greg'). Without a match the clock still works, but only
@@ -46,6 +47,16 @@ FarmSmart.registerTile({
         <div id="scFarmList"></div>
       </div>
     </div>
+
+    <div class="sheet-mask" id="scOffSheetMask">
+      <div class="sheet">
+        <div class="sheet-header">
+          <button class="sheet-back-btn" id="scOffSheetBackBtn" aria-label="Back">${FarmSmart.icons.back}</button>
+          <h2>Clock Off — What for?</h2>
+        </div>
+        <div id="scOffList"></div>
+      </div>
+    </div>
   `,
 
   init: function () {
@@ -54,6 +65,13 @@ FarmSmart.registerTile({
     const RETRY_MS = 60000;
     const EMPLOYEES_CACHE_KEY = 'farmsmart-shiftclock-employees';
     const SYNC_LABELS = { saving: 'Saving…', saved: 'Saved', pending: 'Offline, will sync', local: 'This device only' };
+    // Why a stretch of work ends; values of timesheet_segments.end_reason.
+    const END_REASONS = [
+      { id: 'rest_break', label: 'Rest break', icon: 'ti-coffee', breakName: 'rest' },
+      { id: 'meal_break', label: 'Meal break', icon: 'ti-tools-kitchen-2', breakName: 'meal' },
+      { id: 'end_of_day', label: 'End of day', icon: 'ti-home' },
+    ];
+    const endReason = (id) => END_REASONS.find((r) => r.id === id);
 
     let employees = [];
     let employee = null;   // the current employee matching the app user
@@ -87,6 +105,19 @@ FarmSmart.registerTile({
     const workedSeconds = (segments) => segments
       .filter((s) => s.end)
       .reduce((total, s) => total + toSeconds(s.end) - toSeconds(s.start), 0);
+
+    // Break time per kind: each gap is named by the segment before it.
+    // The gap after an end of day (split shift) is not a break.
+    function breakSummary(segments) {
+      const totals = {};
+      segments.slice(1).forEach((next, i) => {
+        const name = endReason(segments[i].reason).breakName;
+        if (!name) return;
+        totals[name] = (totals[name] || 0) + toSeconds(next.start) - toSeconds(segments[i].end);
+      });
+      return Object.entries(totals).filter(([, sec]) => sec >= 60)
+        .map(([name, sec]) => `${formatDuration(sec)} ${name}`).join(', ');
+    }
 
     const farmName = (farmId) => (FarmSmart.getFarm(farmId) || { name: 'your farm' }).name;
 
@@ -130,7 +161,7 @@ FarmSmart.registerTile({
 
     function rowToState(row) {
       const segments = row.timesheet_segments
-        .map((s) => ({ start: s.start_time, end: s.end_time }))
+        .map((s) => ({ start: s.start_time, end: s.end_time, reason: s.end_reason }))
         .sort((a, b) => a.start.localeCompare(b.start));
       return {
         dateKey: todayKey(),
@@ -158,7 +189,7 @@ FarmSmart.registerTile({
       }, { onConflict: 'employee_id,work_date' }).select('id').single();
       if (error) throw error;
 
-      const segments = day.segments.map((s) => ({ shift_id: shift.id, start_time: s.start, end_time: s.end }));
+      const segments = day.segments.map((s) => ({ shift_id: shift.id, start_time: s.start, end_time: s.end, end_reason: s.reason }));
       const { error: segmentError } = await db.from('timesheet_segments')
         .upsert(segments, { onConflict: 'shift_id,start_time' });
       if (segmentError) throw segmentError;
@@ -196,7 +227,7 @@ FarmSmart.registerTile({
       if (outbox.length) return;
       try {
         const { data, error } = await FarmSmart.supabase().from('timesheet_shifts')
-          .select('farm_id, status, gps_checks, timesheet_segments(start_time, end_time)')
+          .select('farm_id, status, gps_checks, timesheet_segments(start_time, end_time, end_reason)')
           .eq('employee_id', employee.id).eq('work_date', todayKey()).maybeSingle();
         if (error) throw error;
         if (data) { state = rowToState(data); saveLocal(); }
@@ -273,20 +304,17 @@ FarmSmart.registerTile({
       if (state.status === 'on') {
         statusLine.textContent = `Clocked on at ${farmName(state.farmId)} since ${formatTime(last.start)}`;
         showSummary(worked > 0 ? `${formatDuration(worked)} worked earlier today` : '');
-        renderActions([
-          { label: 'Start Meal Break', icon: 'ti-coffee', onClick: startBreak },
-          { label: 'Clock Off', icon: 'ti-logout', primary: true, onClick: clockOff },
-        ]);
+        renderActions([{ label: 'Clock Off', icon: 'ti-logout', primary: true, onClick: openOffSheet }]);
       } else if (state.status === 'break') {
-        statusLine.textContent = `On meal break since ${formatTime(last.end)}`;
+        statusLine.textContent = `On ${endReason(last.reason).breakName} break since ${formatTime(last.end)}`;
         showSummary(`${formatDuration(worked)} worked so far`);
         renderActions([
-          { label: 'End Meal Break', icon: 'ti-player-play', primary: true, onClick: endBreak },
-          { label: 'Clock Off', icon: 'ti-logout', onClick: clockOff },
+          { label: 'End Break', icon: 'ti-player-play', primary: true, onClick: endBreak },
+          { label: 'End of Day', icon: 'ti-home', onClick: endDayFromBreak },
         ]);
       } else if (state.status === 'complete') {
-        const breaks = toSeconds(last.end) - toSeconds(first.start) - worked;
-        const breakNote = breaks >= 60 ? ` (${formatDuration(breaks)} break)` : '';
+        const breaks = breakSummary(segments);
+        const breakNote = breaks ? ` (${breaks})` : '';
         statusLine.textContent = `Shift complete at ${farmName(state.farmId)}`;
         showSummary(`${formatTime(first.start)} – ${formatTime(last.end)} · ${formatDuration(worked)} worked${breakNote}`);
         renderActions([{ label: 'Clock On Again', icon: 'ti-login', primary: true, onClick: clockOnAgain }]);
@@ -314,7 +342,11 @@ FarmSmart.registerTile({
     }
 
     const openSegment = () => state.segments.push({ start: timeAfter(lastTime()), end: null });
-    const closeSegment = () => { state.segments[state.segments.length - 1].end = timeAfter(lastTime()); };
+    function closeSegment(reason) {
+      const last = state.segments[state.segments.length - 1];
+      last.end = timeAfter(lastTime());
+      last.reason = reason;
+    }
 
     async function act(action, farmId, change, toastMessage) {
       if (busy) return;
@@ -347,21 +379,22 @@ FarmSmart.registerTile({
       state.status = 'on';
     }, 'Clocked on again');
 
-    const startBreak = () => act('break_start', state.farmId, () => {
-      closeSegment();
-      state.status = 'break';
-    }, 'Meal break started');
+    const clockOff = (reason) => act(reason.id, state.farmId, () => {
+      closeSegment(reason.id);
+      state.status = reason.id === 'end_of_day' ? 'complete' : 'break';
+    }, reason.id === 'end_of_day' ? 'Clocked off for the day' : `${reason.label} started`);
 
     const endBreak = () => act('break_end', state.farmId, () => {
       openSegment();
       state.status = 'on';
-    }, 'Meal break ended');
+    }, 'Break ended');
 
-    // During a break the last segment is already closed.
-    const clockOff = () => act('clock_off', state.farmId, () => {
-      if (state.status === 'on') closeSegment();
+    // The break turns out to be the end of the day: the segment is
+    // already closed, only its reason changes.
+    const endDayFromBreak = () => act('end_of_day', state.farmId, () => {
+      state.segments[state.segments.length - 1].reason = 'end_of_day';
       state.status = 'complete';
-    }, 'Clocked off');
+    }, 'Clocked off for the day');
 
     const farmSheet = FarmSmart.createPanel('scFarmSheetMask', 'scFarmSheetBackBtn');
 
@@ -376,6 +409,20 @@ FarmSmart.registerTile({
         btn.addEventListener('click', () => { farmSheet.close(); clockOn(btn.dataset.farm); });
       });
       farmSheet.open();
+    }
+
+    const offSheet = FarmSmart.createPanel('scOffSheetMask', 'scOffSheetBackBtn');
+
+    function openOffSheet() {
+      const list = document.getElementById('scOffList');
+      list.innerHTML = END_REASONS.map((r) => `
+        <button type="button" class="sheet-row" data-reason="${r.id}">
+          <span class="sheet-row__title"><i class="ti ${r.icon}"></i> ${r.label}</span>
+        </button>`).join('');
+      list.querySelectorAll('.sheet-row').forEach((btn) => {
+        btn.addEventListener('click', () => { offSheet.close(); clockOff(endReason(btn.dataset.reason)); });
+      });
+      offSheet.open();
     }
 
     window.addEventListener('online', sync);

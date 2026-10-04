@@ -165,12 +165,16 @@ create table timesheet_shifts (
 );
 
 -- One continuous stretch of work within a day; breaks are the gaps.
--- end_time null = still working. Known limit: no shift past midnight.
+-- end_time null = still working. end_reason = why the stretch ended, so
+-- the gap after it is a rest break, a meal break, or the end of the day.
+-- Known limit: no shift past midnight.
 create table timesheet_segments (
   shift_id   uuid not null references timesheet_shifts(id) on delete cascade,
   start_time time not null,
   end_time   time check (end_time > start_time),
-  primary key (shift_id, start_time)
+  end_reason text check (end_reason in ('rest_break', 'meal_break', 'end_of_day')),
+  primary key (shift_id, start_time),
+  check ((end_time is null) = (end_reason is null))
 );
 -- At most one open segment per day.
 create unique index timesheet_segments_one_open_idx on timesheet_segments (shift_id) where end_time is null;
@@ -340,7 +344,8 @@ insert into public_holidays (holiday_date, state, name) values
 -- Others: demo hours (source 'demo'); remove later with
 --   delete from timesheet_shifts where source = 'demo';
 -- Each day is listed as alternating start/end times, then split into
--- one segment per start/end pair.
+-- one segment per start/end pair. Gaps are meal breaks (Greg's call);
+-- the last segment ends the day.
 create temporary table imported_hours on commit drop as
 select v.emp_code, v.work_date::date as work_date, v.farm_code, v.times::time[] as times, v.note, v.source
 from (values
@@ -702,8 +707,9 @@ from imported_hours i
 join employees e on e.code = i.emp_code
 join farms f on f.code = i.farm_code;
 
-insert into timesheet_segments (shift_id, start_time, end_time)
-select s.id, i.times[n], i.times[n + 1]
+insert into timesheet_segments (shift_id, start_time, end_time, end_reason)
+select s.id, i.times[n], i.times[n + 1],
+       case when n + 1 = array_length(i.times, 1) then 'end_of_day' else 'meal_break' end
 from imported_hours i
 join employees e on e.code = i.emp_code
 join timesheet_shifts s on s.employee_id = e.id and s.work_date = i.work_date
