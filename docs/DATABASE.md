@@ -179,5 +179,5 @@ public_holidays: linked to companies through the state (VIC), not by an FK
 **1NF: met, with one deliberate exception.** Clock times have their own table (`timesheet_segments`), where the database rejects an invalid time or an end before its start. The exception is `gps_checks`, a small log of positions in `timesheet_shifts`: it is only displayed, never searched, so keeping it as one block is reasonable.
 
 **Two things to watch, without breaking 3NF:**
-- A couple is stored on both sides (Ani → Daniel and Daniel → Ani). The app must always update both records together.
+- A couple is stored on both sides (Chloe → Daniel and Daniel → Chloe). The app must always update both records together.
 - With the single "Approve and send to Xero" button, `approved_at` and `sent_at` will hold the same time once Xero is connected. Both stay until then, since a fortnight can be approved without being sent.
