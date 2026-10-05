@@ -150,6 +150,17 @@ PK = day + state.
 | `u`, `v` | Position on the photo |
 | `updated_at` | Last change |
 
+### xero_tokens: the Xero connection (closed table)
+| Column | Meaning |
+|---|---|
+| `company_id` | PK and FK → companies: one connection per company |
+| `access_token` | Key to call Xero, valid 30 minutes |
+| `refresh_token` | Key to get a new `access_token`, valid 60 days, replaced each time |
+| `expires_at` | When `access_token` stops working |
+| `updated_at` | Last change |
+
+These tokens are as sensitive as a password. Row-level security is on with no policy, and the app's public key has no access: only the Vercel functions in `/api` read and write this table, with the `service_role` key. The Xero organisation id is in `companies.xero_tenant_id`. Created by `supabase/migrations/002_xero_tokens.sql`.
+
 ## 2. How the tables link
 
 ```
@@ -158,6 +169,7 @@ companies ──< farms ──────────< farm_plans ──< farm_
     │           ├──< employee_farms >──┐
     │           ├──< roster_shifts >───┤
     │           └──< timesheet_shifts >┤ ──< timesheet_segments
+    ├──  xero_tokens (one row per company)
     └──< employees ────────────────────┘
              ├──< timesheet_approvals
              └── partner_id → employees (itself)
