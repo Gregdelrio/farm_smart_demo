@@ -422,6 +422,9 @@ FarmSmart.registerTile({
       const start = fortnightStart(fortnightOffset);
       const list = unsentEmployees(start);
       const status = document.getElementById('tsSendStatus');
+      // Until there are user accounts, a manager code guards the payroll.
+      const pin = window.prompt('Manager code');
+      if (!pin) return;
       document.getElementById('tsSendBtn').disabled = true;
       status.textContent = 'Sending…';
       try {
@@ -431,13 +434,16 @@ FarmSmart.registerTile({
           res = await fetch(XERO_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ timesheets: list.map((e) => buildXeroTimesheet(e, start)) }),
+            body: JSON.stringify({ companyId: FarmSmart.company.id, pin, timesheets: list.map((e) => buildXeroTimesheet(e, start)) }),
           });
         } catch (err) {
           throw new Error('Could not reach the server. Check the connection.');
         }
-        if (res.status === 404) throw new Error('Approved. Xero is not connected yet, so nothing was sent.');
-        if (!res.ok) throw new Error(`Approved, but Xero returned an error (${res.status}).`);
+        if (res.status === 409) offerXeroConnection(pin);
+        if (!res.ok) {
+          const reply = await res.json().catch(() => ({}));
+          throw new Error(`Approved, but not sent to Xero: ${reply.error || `error ${res.status}`}`);
+        }
         const sentAt = new Date().toISOString();
         await saveApprovals(list, start, { sentAt });
         status.textContent = `Sent to Xero as drafts · ${formatStamp(sentAt)}`;
@@ -446,6 +452,13 @@ FarmSmart.registerTile({
         status.textContent = err.message || 'Could not save the approval. Try again.';
       }
       renderFortnight();
+    }
+
+    // Xero asks the farmer to log in and pick the organisation, then
+    // comes back to the app with ?xero=connected.
+    function offerXeroConnection(pin) {
+      const url = `/api/xero-connect?company=${encodeURIComponent(FarmSmart.company.id)}&pin=${encodeURIComponent(pin)}`;
+      openConfirm('Connect Xero?', 'Log in to Xero and choose the organisation that runs the payroll. Then send again.', 'Connect', () => { window.location.href = url; });
     }
 
     function confirmSend() {
@@ -491,6 +504,13 @@ FarmSmart.registerTile({
     document.getElementById('tsSendBtn').addEventListener('click', confirmSend);
     document.getElementById('tsDayPrevBtn').addEventListener('click', () => changeDay(-1));
     document.getElementById('tsDayNextBtn').addEventListener('click', () => changeDay(1));
+
+    // Back from Xero's login page.
+    const xeroResult = new URLSearchParams(window.location.search).get('xero');
+    if (xeroResult) {
+      showToast(xeroResult === 'connected' ? 'Xero connected. You can send the timesheets now.' : 'Xero was not connected.');
+      history.replaceState(null, '', window.location.pathname);
+    }
 
     // Shift Clock saved a day: re-read it and redraw.
     document.addEventListener('farmsmart:shiftchanged', async (e) => {
