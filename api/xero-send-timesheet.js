@@ -5,7 +5,7 @@
    Payroll as DRAFT timesheets, which the farmer then checks in Xero.
    Replies 401 wrong code, 409 Xero not connected, 422 Xero refused. */
 
-const { PAYROLL_URL, checkPin, db, accessToken, xero } = require('./_xero');
+const { PAYROLL_URL, safeMessage, checkPin, db, accessToken, xero } = require('./_xero');
 
 // Which Xero earnings rate takes each line: the first whose name
 // contains the words (lower case). Set up in Xero > Payroll settings.
@@ -79,7 +79,6 @@ module.exports = async (req, res) => {
     res.status(200).json({ sent: toSend.length });
   } catch (err) {
     console.error('[xero-send-timesheet]', err);
-    // The cause holds no secret and the caller passed the manager code.
-    res.status(500).json({ error: `Server error: ${err.message}` });
+    res.status(500).json({ error: `Server error: ${safeMessage(err)}` });
   }
 };

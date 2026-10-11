@@ -18,13 +18,21 @@ function checkPin(pin) {
   return expected.length > 0 && given.length === expected.length && crypto.timingSafeEqual(given, expected);
 }
 
+/** Error text safe to show: secret values are masked. */
+function safeMessage(err) {
+  const secrets = ['SUPABASE_SERVICE_ROLE_KEY', 'XERO_CLIENT_SECRET', 'XERO_CLIENT_ID', 'MANAGER_CODE']
+    .flatMap((name) => [process.env[name], (process.env[name] || '').trim()]).filter(Boolean);
+  return secrets.reduce((text, secret) => text.split(secret).join('[hidden]'), String(err && err.message));
+}
+
 /** Supabase REST call with the service_role key (bypasses row-level security). */
 async function db(path, { method = 'GET', body, prefer } = {}) {
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method,
     headers: {
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      apikey: key,
+      Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
       ...(prefer ? { Prefer: prefer } : {}),
     },
@@ -36,7 +44,7 @@ async function db(path, { method = 'GET', body, prefer } = {}) {
 
 /** Asks Xero for tokens, from a login code or a refresh token. */
 async function requestTokens(params) {
-  const basic = Buffer.from(`${process.env.XERO_CLIENT_ID}:${process.env.XERO_CLIENT_SECRET}`).toString('base64');
+  const basic = Buffer.from(`${(process.env.XERO_CLIENT_ID || '').trim()}:${(process.env.XERO_CLIENT_SECRET || '').trim()}`).toString('base64');
   const res = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
     headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -86,4 +94,4 @@ async function xero(token, tenantId, url, { method = 'GET', body } = {}) {
   return { ok: res.ok, status: res.status, data };
 }
 
-module.exports = { SCOPES, REDIRECT_URI, PAYROLL_URL, checkPin, db, requestTokens, saveTokens, accessToken, xero };
+module.exports = { safeMessage, SCOPES, REDIRECT_URI, PAYROLL_URL, checkPin, db, requestTokens, saveTokens, accessToken, xero };
