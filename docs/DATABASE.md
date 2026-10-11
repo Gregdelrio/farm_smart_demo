@@ -161,6 +161,8 @@ PK = day + state.
 
 These tokens are as sensitive as a password. Row-level security is on with no policy, and the app's public key has no access: only the Vercel functions in `/api` read and write this table, with the `service_role` key. The Xero organisation id is in `companies.xero_tenant_id`. Created by `supabase/migrations/002_xero_tokens.sql`.
 
+`service_role` only has the rights the Xero functions need (`supabase/migrations/003_service_role_grants.sql`): read and write `xero_tokens`, read and update `companies` and `employees`. It has no rights on the other tables.
+
 ## 2. How the tables link
 
 ```
