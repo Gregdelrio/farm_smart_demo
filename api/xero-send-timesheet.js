@@ -79,6 +79,7 @@ module.exports = async (req, res) => {
     res.status(200).json({ sent: toSend.length });
   } catch (err) {
     console.error('[xero-send-timesheet]', err);
-    res.status(500).json({ error: 'Server error while talking to Xero.' });
+    // The cause holds no secret and the caller passed the manager code.
+    res.status(500).json({ error: `Server error: ${err.message}` });
   }
 };

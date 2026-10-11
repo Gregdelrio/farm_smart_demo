@@ -28,6 +28,7 @@ module.exports = async (req, res) => {
     res.redirect(302, '/?xero=connected');
   } catch (err) {
     console.error('[xero-callback]', err);
-    res.status(500).send('Could not connect to Xero. Try again from FarmSmart.');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(500).send(`Could not connect to Xero (${err.message}). Try again from FarmSmart.`);
   }
 };

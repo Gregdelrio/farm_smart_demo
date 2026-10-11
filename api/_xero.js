@@ -24,6 +24,7 @@ async function db(path, { method = 'GET', body, prefer } = {}) {
     method,
     headers: {
       apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
       'Content-Type': 'application/json',
       ...(prefer ? { Prefer: prefer } : {}),
     },
