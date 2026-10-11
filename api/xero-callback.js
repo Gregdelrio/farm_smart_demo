@@ -2,7 +2,7 @@
    allow access. Swaps the one-time code for tokens and keeps them in the
    closed xero_tokens table, then returns to the app. */
 
-const { REDIRECT_URI, db, requestTokens, saveTokens } = require('./_xero');
+const { REDIRECT_URI, safeMessage, db, requestTokens, saveTokens } = require('./_xero');
 
 module.exports = async (req, res) => {
   const { code, state, error } = req.query;
@@ -29,6 +29,6 @@ module.exports = async (req, res) => {
   } catch (err) {
     console.error('[xero-callback]', err);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.status(500).send(`Could not connect to Xero (${err.message}). Try again from FarmSmart.`);
+    res.status(500).send(`Could not connect to Xero (${safeMessage(err)}). Try again from FarmSmart.`);
   }
 };
