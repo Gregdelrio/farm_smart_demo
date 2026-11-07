@@ -3,6 +3,8 @@
    The crossing only has a warning light, no gate. The big button
    itself carries the status (yellow = idle, blinking orange = active);
    the road name below follows the active farm.
+   START/STOP switch the real light through /api/crossing-light;
+   "Simulate crossing" only changes the screen.
    ===================================================================== */
 
 FarmSmart.registerTile({
@@ -53,10 +55,29 @@ FarmSmart.registerTile({
       showToast(active ? 'Crossing sequence started' : 'Crossing sequence ended');
     }
 
-    function startCrossing() {
+    const LIGHT_ENDPOINT = '/api/crossing-light';
+
+    /** Asks the server to switch the real light; resolves to true once Notehub has the command. */
+    async function sendLightCommand(on) {
+      showToast('Sending…');
+      try {
+        const res = await fetch(LIGHT_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ on }),
+        });
+        if (res.ok) return true;
+        const reply = await res.json().catch(() => ({}));
+        showToast(`Light not switched: ${reply.error || `error ${res.status}`}`);
+      } catch (err) {
+        showToast('Could not reach the server. Check the connection.');
+      }
+      return false;
+    }
+
+    function startCrossing(backdateMinutes) {
       setActive(true);
-      // Backdated a little so the demo doesn't always read "since 0 min".
-      elapsedBaseMinutes = 1 + Math.floor(Math.random() * 5);
+      elapsedBaseMinutes = backdateMinutes;
       elapsedStartedAt = Date.now();
       renderElapsed();
       elapsedTimer = setInterval(renderElapsed, 30000);
@@ -69,14 +90,22 @@ FarmSmart.registerTile({
     }
 
     document.getElementById('crossingBtn').addEventListener('click', () => {
-      if (isActive) openConfirm('Stop crossing sequence?', '', 'Stop', endCrossing);
-      else openConfirm('Start crossing sequence?', '', 'Start', startCrossing);
+      if (isActive) {
+        openConfirm('Stop crossing sequence?', '', 'Stop', async () => {
+          if (await sendLightCommand(false)) endCrossing();
+        });
+      } else {
+        openConfirm('Start crossing sequence?', '', 'Start', async () => {
+          if (await sendLightCommand(true)) startCrossing(0);
+        });
+      }
     });
 
     // Demo shortcut: same as the button, without the confirmation step.
     document.getElementById('crossingSimulateBtn').addEventListener('click', () => {
       if (isActive) endCrossing();
-      else startCrossing();
+      // Backdated a little so the demo doesn't always read "since 0 min".
+      else startCrossing(1 + Math.floor(Math.random() * 5));
     });
 
     document.addEventListener('farmsmart:farmchanged', updateRoadLabel);
